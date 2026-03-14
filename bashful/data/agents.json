@@ -1,0 +1,81 @@
+[
+  {
+    "id": "claude",
+    "name": "Claude Code",
+    "executable": "claude",
+    "description": "Anthropic's agentic coding assistant. Operates in-terminal with full file and shell access.",
+    "invocation": "claude -p \"your prompt here\"",
+    "headless": {
+      "style": "flag",
+      "args": ["-p", "{prompt}"],
+      "output_format_flag": "--output-format",
+      "output_formats": ["text", "json", "stream-json"]
+    },
+    "version_args": ["--version"]
+  },
+  {
+    "id": "codex",
+    "name": "OpenAI Codex CLI",
+    "executable": "codex",
+    "description": "OpenAI's terminal-based coding agent with sandboxed execution.",
+    "invocation": "codex exec \"your prompt here\"",
+    "headless": {
+      "style": "subcommand",
+      "args": ["exec", "{prompt}"]
+    },
+    "version_args": ["--version"]
+  },
+  {
+    "id": "copilot",
+    "name": "GitHub Copilot CLI",
+    "executable": "gh",
+    "description": "GitHub's AI pair programmer, accessed via the gh CLI extension.",
+    "invocation": "gh copilot -p \"your prompt here\" --allow-all-tools",
+    "subcommand": "copilot",
+    "headless": {
+      "style": "subcommand",
+      "args": ["copilot", "-p", "{prompt}", "--allow-all-tools"]
+    },
+    "version_args": ["copilot", "--", "--version"]
+  },
+  {
+    "id": "gemini",
+    "name": "Gemini CLI",
+    "executable": "gemini",
+    "description": "Google's Gemini agent for terminal-based coding and research.",
+    "invocation": "gemini -p \"your prompt here\"",
+    "headless": {
+      "style": "flag",
+      "args": ["-p", "{prompt}", "-o", "text"],
+      "output_format_flag": "-o",
+      "output_formats": ["text", "json", "stream-json"]
+    },
+    "version_args": ["--version"]
+  },
+  {
+    "id": "qwen",
+    "name": "Qwen CLI",
+    "executable": "qwen",
+    "description": "Alibaba's Qwen coding agent for local and remote model interaction.",
+    "invocation": "qwen -p \"your prompt here\"",
+    "headless": {
+      "style": "flag",
+      "args": ["-p", "{prompt}", "-o", "text"],
+      "output_format_flag": "-o",
+      "output_formats": ["text", "json", "stream-json"]
+    },
+    "version_args": ["--version"]
+  },
+  {
+    "id": "opencode",
+    "name": "OpenCode",
+    "executable": "opencode",
+    "description": "Open-source terminal coding assistant supporting multiple LLM backends.",
+    "invocation": "opencode run \"your prompt here\"",
+    "headless": {
+      "style": "subcommand",
+      "args": ["run", "{prompt}"]
+    },
+    "version_args": ["--version"]
+  }
+]
