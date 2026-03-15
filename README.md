@@ -73,6 +73,9 @@ bashful review claude,codex "Review this plan for risks." --judge claude
 
 # Parallel reviews
 bashful review claude,codex,gemini "Audit this code for security" --parallel
+
+# Save review as artifact
+bashful review claude,codex "Review this plan." --save
 ```
 
 ### Dialectic (thesis / antithesis / synthesis)
@@ -83,6 +86,19 @@ bashful dialectic claude,codex "Should this tool prefer local-first routing?"
 
 # Add synthesis via a judge
 bashful dialectic claude,codex "Should we use a monorepo?" --judge claude
+
+# Save dialectic as artifact
+bashful dialectic claude,codex "Question?" --judge claude --save
+```
+
+### Matrix (prompt × agent sweep)
+
+```bash
+# Run multiple prompts across agents
+bashful matrix claude,codex --prompt "Summarize this" --prompt "Find risks"
+
+# Parallel + save
+bashful matrix claude,codex --prompt "p1" --prompt "p2" --parallel --save
 ```
 
 ### Configuration
@@ -194,7 +210,8 @@ Not all agents support `write` mode. Use `bashful show <agent>` to check.
 - **Dialectic** (`bashful/dialectic.py`) — thesis/antithesis/synthesis workflow
 - **Config** (`bashful/config.py`) — user configuration overrides for agent capabilities
 - **Normalize** (`bashful/normalize.py`) — lightweight result normalization helpers
-- **Artifacts** (`bashful/artifacts.py`) — lightweight JSON artifact persistence for run/fanout results
+- **Matrix** (`bashful/matrix.py`) — prompt × agent matrix sweep
+- **Artifacts** (`bashful/artifacts.py`) — lightweight JSON artifact persistence
 - **Health** (`bashful/health.py`) — version + live ping checks
 - **Supervisor** (`bashful/supervisor.py`) — background job management with file-based state
 - **Worktree** (`bashful/worktree.py`) — git worktree isolation for parallel work

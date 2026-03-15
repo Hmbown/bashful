@@ -9,7 +9,10 @@ import pytest
 from bashful.artifacts import (
     ARTIFACTS_DIR,
     list_artifacts,
+    save_dialectic_artifact,
     save_fanout_artifact,
+    save_matrix_artifact,
+    save_review_artifact,
     save_run_artifact,
     show_artifact,
 )
@@ -93,6 +96,109 @@ class TestSaveFanoutArtifact:
         assert data["all_ok"] is False
         assert data["results"][1]["ok"] is False
         assert "error" in data["results"][1]
+
+
+class TestSaveReviewArtifact:
+    def test_creates_file(self, tmp_artifacts_dir):
+        data = {
+            "prompt": "Check this.",
+            "results": [
+                ("claude", _run_result(agent_id="claude")),
+                ("codex", _run_result(agent_id="codex")),
+            ],
+            "judge": None,
+        }
+        aid = save_review_artifact(data)
+        assert aid.startswith("review-")
+        path = tmp_artifacts_dir / f"{aid}.json"
+        assert path.exists()
+        artifact = json.loads(path.read_text())
+        assert artifact["type"] == "review"
+        assert artifact["agents"] == ["claude", "codex"]
+        assert artifact["prompt"] == "Check this."
+        assert artifact["all_ok"] is True
+
+    def test_with_judge(self, tmp_artifacts_dir):
+        judge_data = {"agent": "claude", "ok": True, "stdout": "Good."}
+        data = {
+            "prompt": "Check.",
+            "results": [("claude", _run_result(agent_id="claude"))],
+            "judge": judge_data,
+        }
+        aid = save_review_artifact(data)
+        artifact = json.loads((tmp_artifacts_dir / f"{aid}.json").read_text())
+        assert artifact["judge"] == judge_data
+
+
+class TestSaveDialecticArtifact:
+    def test_creates_file(self, tmp_artifacts_dir):
+        data = {
+            "question": "Monorepos?",
+            "thesis": ("claude", _run_result(agent_id="claude", stdout="Pro.")),
+            "antithesis": ("codex", _run_result(agent_id="codex", stdout="Con.")),
+            "synthesis": None,
+        }
+        aid = save_dialectic_artifact(data)
+        assert aid.startswith("dialectic-")
+        path = tmp_artifacts_dir / f"{aid}.json"
+        assert path.exists()
+        artifact = json.loads(path.read_text())
+        assert artifact["type"] == "dialectic"
+        assert artifact["agents"] == ["claude", "codex"]
+        assert artifact["question"] == "Monorepos?"
+        assert artifact["all_ok"] is True
+
+    def test_with_synthesis(self, tmp_artifacts_dir):
+        synthesis = {"agent": "claude", "ok": True, "stdout": "Balanced."}
+        data = {
+            "question": "Q?",
+            "thesis": ("claude", _run_result(agent_id="claude")),
+            "antithesis": ("codex", _run_result(agent_id="codex")),
+            "synthesis": synthesis,
+        }
+        aid = save_dialectic_artifact(data)
+        artifact = json.loads((tmp_artifacts_dir / f"{aid}.json").read_text())
+        assert artifact["synthesis"] == synthesis
+
+
+class TestSaveMatrixArtifact:
+    def test_creates_file(self, tmp_artifacts_dir):
+        rows = [
+            {
+                "prompt": "p1",
+                "results": [
+                    ("claude", _run_result(agent_id="claude")),
+                    ("codex", _run_result(agent_id="codex")),
+                ],
+            },
+            {
+                "prompt": "p2",
+                "results": [
+                    ("claude", _run_result(agent_id="claude")),
+                    ("codex", _run_result(agent_id="codex")),
+                ],
+            },
+        ]
+        aid = save_matrix_artifact(rows, ["claude", "codex"])
+        assert aid.startswith("matrix-")
+        path = tmp_artifacts_dir / f"{aid}.json"
+        assert path.exists()
+        artifact = json.loads(path.read_text())
+        assert artifact["type"] == "matrix"
+        assert artifact["agents"] == ["claude", "codex"]
+        assert len(artifact["prompts"]) == 2
+        assert artifact["all_ok"] is True
+
+    def test_records_failure(self, tmp_artifacts_dir):
+        rows = [{
+            "prompt": "p1",
+            "results": [
+                ("bad", FanoutError(agent_id="bad", error="Unknown agent")),
+            ],
+        }]
+        aid = save_matrix_artifact(rows, ["bad"])
+        artifact = json.loads((tmp_artifacts_dir / f"{aid}.json").read_text())
+        assert artifact["all_ok"] is False
 
 
 class TestListArtifacts:

@@ -72,6 +72,10 @@ class TestGenerateSkillDoc:
         assert "bashful dialectic" in doc
         assert "Dialectic" in doc
 
+    def test_contains_matrix_command(self):
+        doc = generate_skill_doc()
+        assert "bashful matrix" in doc
+
     def test_contains_config_command(self):
         doc = generate_skill_doc()
         assert "bashful config" in doc
@@ -143,3 +147,4 @@ class TestGetSkillMetadata:
         assert "watch" in meta["commands"]
         assert "artifacts" in meta["commands"]
         assert "artifacts show" in meta["commands"]
+        assert "matrix" in meta["commands"]

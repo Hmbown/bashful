@@ -94,7 +94,7 @@ def get_skill_metadata() -> dict:
         "default_mode": "read",
         "commands": [
             "list", "doctor", "show", "run", "fanout", "compare",
-            "review", "dialectic", "config",
+            "review", "dialectic", "matrix", "config",
             "ping", "versions",
             "launch", "jobs", "logs", "kill", "wait", "watch",
             "worktree create", "worktree list", "worktree remove",
@@ -120,6 +120,7 @@ Use bashful when you need to:
 - Compare agent responses with an optional judge agent
 - Get structured reviews/critiques from multiple agents
 - Explore opposing strategies via thesis/antithesis dialectics
+- Sweep multiple prompts across agents (matrix)
 - Launch long-running agent work in the background
 - Wait for or watch background jobs
 - Run agents in isolated git worktrees for parallel work
@@ -168,6 +169,7 @@ clear error.  Use `bashful show <agent>` to check which modes an agent supports.
 | `bashful review agent1,agent2 "target" --judge claude` | Review with synthesized assessment |
 | `bashful dialectic agent_a,agent_b "question"` | Thesis/antithesis dialectic |
 | `bashful dialectic agent_a,agent_b "question" --judge claude` | Dialectic with synthesis |
+| `bashful matrix agent1,agent2 --prompt "p1" --prompt "p2"` | Prompt × agent matrix sweep |
 | `bashful config` | Show current configuration and overrides |
 | `bashful launch <agent> "prompt" [-m mode]` | Launch a background job |
 | `bashful jobs` | List all jobs and their status |
@@ -180,6 +182,9 @@ clear error.  Use `bashful show <agent>` to check which modes an agent supports.
 | `bashful worktree remove <name>` | Remove a worktree |
 | `bashful run <agent> "prompt" --save` | Run and save an artifact |
 | `bashful fanout agents "prompt" --save` | Fanout and save an artifact |
+| `bashful review agents "target" --save` | Review and save an artifact |
+| `bashful dialectic agents "question" --save` | Dialectic and save an artifact |
+| `bashful matrix agents --prompt "p1" --save` | Matrix and save an artifact |
 | `bashful artifacts` | List saved artifacts |
 | `bashful artifacts <id>` | Show a saved artifact (JSON) |
 | `bashful skill [--live]` | Print this skill document |
@@ -263,14 +268,28 @@ bashful dialectic claude,codex "Should this tool prefer local-first routing?"
 bashful dialectic claude,codex "Should we use a monorepo?" --judge claude
 ```
 
-### 8. Save and inspect artifacts
+### 8. Prompt × agent matrix
 
 ```bash
-# Save a run result
+# Run multiple prompts across agents
+bashful matrix claude,codex --prompt "Summarize this" --prompt "Find risks"
+
+# Parallel + save
+bashful matrix claude,codex --prompt "p1" --prompt "p2" --parallel --save
+```
+
+### 9. Save and inspect artifacts
+
+```bash
+# Save results from any command
 bashful run claude "Explain this function" --save
 
 # Save a fanout result
 bashful fanout claude,codex "Review this code" --save
+
+# Save review/dialectic results
+bashful review claude,codex "Audit this plan" --save
+bashful dialectic claude,codex "Monorepos?" --judge claude --save
 
 # List recent artifacts
 bashful artifacts
@@ -282,7 +301,7 @@ bashful artifacts run-claude-1710000000
 Artifacts are stored as JSON in `~/.bashful/artifacts/` and can be read by
 other tools (e.g. Hermes) for post-hoc analysis.
 
-### 9. Launch background work
+### 10. Launch background work
 
 ```bash
 # Start a job
@@ -307,7 +326,7 @@ bashful watch <job_id>
 bashful kill <job_id>
 ```
 
-### 10. Parallel work with worktree isolation
+### 11. Parallel work with worktree isolation
 
 ```bash
 # Create isolated worktrees
@@ -334,7 +353,8 @@ bashful worktree remove add-tests
 - Use `bashful review` for critique-oriented workflows (plan/code/doc inspection).
 - Use `bashful dialectic` to explore opposing strategies or tradeoffs.
 - Use `bashful fanout` for multi-agent dispatch without judge overhead (`--parallel` for speed).
-- Use `--save` with `run` or `fanout` to persist results as artifacts.
+- Use `bashful matrix` for prompt × agent sweeps — multiple prompts, multiple agents, one command.
+- Use `--save` with `run`, `fanout`, `review`, `dialectic`, or `matrix` to persist results as artifacts.
 - Use `bashful launch` for work that takes more than a few seconds; follow with `wait` or `watch`.
 - Use `--isolate` with `launch` to prevent agents from conflicting.
 - Use `-m write` only when you need the agent to modify files.

@@ -270,6 +270,41 @@ def test_dialectic_parser_defaults():
     assert args.judge_timeout == 120.0
 
 
+# ---------------------------------------------------------------------------
+# Matrix command
+# ---------------------------------------------------------------------------
+
+def test_matrix_parser():
+    from bashful.cli import build_parser
+    parser = build_parser()
+    args = parser.parse_args(["matrix", "claude,codex", "--prompt", "p1", "--prompt", "p2"])
+    assert args.agents == "claude,codex"
+    assert args.prompt == ["p1", "p2"]
+
+
+def test_matrix_parser_defaults():
+    from bashful.cli import build_parser
+    parser = build_parser()
+    args = parser.parse_args(["matrix", "claude", "--prompt", "p1"])
+    assert args.parallel is False
+    assert args.save is False
+    assert args.timeout == 60.0
+
+
+def test_review_save_flag():
+    from bashful.cli import build_parser
+    parser = build_parser()
+    args = parser.parse_args(["review", "claude,codex", "hello", "--save"])
+    assert args.save is True
+
+
+def test_dialectic_save_flag():
+    from bashful.cli import build_parser
+    parser = build_parser()
+    args = parser.parse_args(["dialectic", "claude,codex", "hello", "--save"])
+    assert args.save is True
+
+
 def test_dialectic_rejects_wrong_agent_count(capsys):
     from bashful.runner import RunResult
 

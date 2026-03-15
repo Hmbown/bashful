@@ -637,6 +637,11 @@ def cmd_review(args: argparse.Namespace) -> None:
         else:
             print(f"[synthesis error: {j.get('error', 'unknown')}]")
 
+    if args.save:
+        from bashful.artifacts import save_review_artifact
+        artifact_id = save_review_artifact(data, mode=args.mode)
+        print(f"\n  Saved artifact: {artifact_id}", file=sys.stderr)
+
     if any_failed:
         sys.exit(1)
 
@@ -714,6 +719,69 @@ def cmd_dialectic(args: argparse.Namespace) -> None:
             print(s.get("stdout", ""))
         else:
             print(f"[synthesis error: {s.get('error', 'unknown')}]")
+
+    if args.save:
+        from bashful.artifacts import save_dialectic_artifact
+        artifact_id = save_dialectic_artifact(data, mode=args.mode)
+        print(f"\n  Saved artifact: {artifact_id}", file=sys.stderr)
+
+    if any_failed:
+        sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# Matrix command
+# ---------------------------------------------------------------------------
+
+def cmd_matrix(args: argparse.Namespace) -> None:
+    """Run multiple prompts across multiple agents."""
+    from bashful.matrix import matrix
+
+    agent_ids = [a.strip() for a in args.agents.split(",") if a.strip()]
+    if not agent_ids:
+        print("No agents specified.", file=sys.stderr)
+        sys.exit(1)
+
+    prompts = args.prompt
+    if not prompts:
+        print("At least one --prompt required.", file=sys.stderr)
+        sys.exit(1)
+
+    rows = matrix(
+        agent_ids,
+        prompts,
+        timeout=args.timeout,
+        output_format=args.output_format,
+        mode=args.mode,
+        parallel=args.parallel,
+    )
+
+    from bashful.fanout import FanoutError
+
+    any_failed = False
+    for row_idx, row in enumerate(rows):
+        if row_idx > 0:
+            print()
+        print(f"=== prompt: {row['prompt']!r} ===")
+        for agent_id, result in row["results"]:
+            if result.ok:
+                marker = "OK"
+            elif result.timed_out:
+                marker = "TIMEOUT"
+                any_failed = True
+            else:
+                marker = f"FAIL(exit={result.exit_code})"
+                any_failed = True
+            print(f"--- {agent_id} [{marker}] ---")
+            if isinstance(result, FanoutError):
+                print(result.error)
+            elif result.stdout.strip():
+                print(result.stdout.strip())
+
+    if args.save:
+        from bashful.artifacts import save_matrix_artifact
+        artifact_id = save_matrix_artifact(rows, agent_ids, mode=args.mode)
+        print(f"\n  Saved artifact: {artifact_id}", file=sys.stderr)
 
     if any_failed:
         sys.exit(1)
@@ -864,6 +932,7 @@ def build_parser() -> argparse.ArgumentParser:
     rev_p.add_argument("--judge", metavar="AGENT", help="Agent to synthesize reviews")
     rev_p.add_argument("--judge-timeout", type=float, default=120.0,
                         help="Timeout for judge agent (default: 120s)")
+    rev_p.add_argument("--save", action="store_true", help="Save result as an artifact")
 
     # Dialectic
     dia_p = sub.add_parser("dialectic", help="Thesis/antithesis/synthesis dialectic")
@@ -876,6 +945,19 @@ def build_parser() -> argparse.ArgumentParser:
     dia_p.add_argument("--judge", metavar="AGENT", help="Agent to synthesize the dialectic")
     dia_p.add_argument("--judge-timeout", type=float, default=120.0,
                         help="Timeout for judge agent (default: 120s)")
+    dia_p.add_argument("--save", action="store_true", help="Save result as an artifact")
+
+    # Matrix
+    mat_p = sub.add_parser("matrix", help="Run multiple prompts across multiple agents")
+    mat_p.add_argument("agents", help="Comma-separated agent ids (e.g. claude,codex)")
+    mat_p.add_argument("--prompt", action="append", required=True,
+                        help="Prompt to run (repeat for multiple)")
+    mat_p.add_argument("-t", "--timeout", type=float, default=60.0, help="Timeout per agent")
+    mat_p.add_argument("-o", "--output-format", help="Output format")
+    mat_p.add_argument("-m", "--mode", default=DEFAULT_MODE, choices=VALID_MODES,
+                        help=f"Execution mode (default: {DEFAULT_MODE})")
+    mat_p.add_argument("--parallel", action="store_true", help="Run agents concurrently")
+    mat_p.add_argument("--save", action="store_true", help="Save result as an artifact")
 
     # Skill
     skill_p = sub.add_parser("skill", help="Print the bashful skill document")
@@ -898,6 +980,7 @@ def main(argv: list[str] | None = None) -> None:
         "compare": cmd_compare,
         "review": cmd_review,
         "dialectic": cmd_dialectic,
+        "matrix": cmd_matrix,
         "config": cmd_config,
         "artifacts": cmd_artifacts,
         "ping": cmd_ping,
