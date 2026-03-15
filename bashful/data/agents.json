@@ -5,11 +5,15 @@
     "executable": "claude",
     "description": "Anthropic's agentic coding assistant. Operates in-terminal with full file and shell access.",
     "invocation": "claude -p \"your prompt here\"",
+    "modes": ["read", "write"],
     "headless": {
       "style": "flag",
       "args": ["-p", "{prompt}"],
       "output_format_flag": "--output-format",
-      "output_formats": ["text", "json", "stream-json"]
+      "output_formats": ["text", "json", "stream-json"],
+      "mode_args": {
+        "write": ["--allowedTools", "Edit,Write,Bash"]
+      }
     },
     "version_args": ["--version"]
   },
@@ -19,9 +23,13 @@
     "executable": "codex",
     "description": "OpenAI's terminal-based coding agent with sandboxed execution.",
     "invocation": "codex exec \"your prompt here\"",
+    "modes": ["read", "write"],
     "headless": {
       "style": "subcommand",
-      "args": ["exec", "{prompt}"]
+      "args": ["exec", "{prompt}"],
+      "mode_args": {
+        "write": ["--approval-policy", "auto-edit"]
+      }
     },
     "version_args": ["--version"]
   },
@@ -32,6 +40,7 @@
     "description": "GitHub's AI pair programmer, accessed via the gh CLI extension.",
     "invocation": "gh copilot -p \"your prompt here\" --allow-all-tools",
     "subcommand": "copilot",
+    "modes": ["read"],
     "headless": {
       "style": "subcommand",
       "args": ["copilot", "-p", "{prompt}", "--allow-all-tools"]
@@ -44,6 +53,7 @@
     "executable": "gemini",
     "description": "Google's Gemini agent for terminal-based coding and research.",
     "invocation": "gemini -p \"your prompt here\"",
+    "modes": ["read"],
     "headless": {
       "style": "flag",
       "args": ["-p", "{prompt}", "-o", "text"],
@@ -58,6 +68,7 @@
     "executable": "qwen",
     "description": "Alibaba's Qwen coding agent for local and remote model interaction.",
     "invocation": "qwen -p \"your prompt here\"",
+    "modes": ["read"],
     "headless": {
       "style": "flag",
       "args": ["-p", "{prompt}", "-o", "text"],
@@ -72,6 +83,7 @@
     "executable": "opencode",
     "description": "Open-source terminal coding assistant supporting multiple LLM backends.",
     "invocation": "opencode run \"your prompt here\"",
+    "modes": ["read"],
     "headless": {
       "style": "subcommand",
       "args": ["run", "{prompt}"]

@@ -6,7 +6,6 @@ import json
 import os
 import secrets
 import shutil
-import signal
 import subprocess
 import time
 from dataclasses import asdict, dataclass
@@ -53,7 +52,7 @@ class JobStatus:
     job_id: str
     agent_id: str
     pid: int
-    state: str  # "running", "completed", "failed", "killed"
+    state: str  # "running", "completed", "failed", "killed", "unknown", "lost"
     exit_code: int | None
     started_at: float
     ended_at: float | None
@@ -97,6 +96,7 @@ def launch(
     cwd: str | None = None,
     worktree: str | None = None,
     output_format: str | None = None,
+    mode: str = "read",
     jobs_dir: Path | None = None,
 ) -> Job:
     """Launch an agent in the background and return a Job handle.
@@ -107,6 +107,7 @@ def launch(
         cwd: Working directory (overridden by worktree if set).
         worktree: Path to a worktree directory to use as cwd.
         output_format: Output format override.
+        mode: Execution mode ("read" or "write").
         jobs_dir: Override jobs directory (for testing).
     """
     if agent.headless is None:
@@ -117,7 +118,7 @@ def launch(
         raise ValueError(f"Agent {agent.id!r} executable {agent.executable!r} not found in PATH")
 
     effective_cwd = worktree or cwd or os.getcwd()
-    cmd = agent.headless.build_command(resolved, prompt, output_format)
+    cmd = agent.headless.build_command(resolved, prompt, output_format, mode=mode)
 
     base = jobs_dir or JOBS_DIR
     job_id = _gen_id()
@@ -220,14 +221,16 @@ def poll(job_id: str, *, jobs_dir: Path | None = None) -> JobStatus:
             worktree=meta.get("worktree"),
         )
 
-    # Cross-session: no Popen handle, check PID
+    # Cross-session: no Popen handle — we cannot trust PID alone
+    # (PIDs are recycled; the process may belong to someone else).
     pid = meta["pid"]
     if _pid_alive(pid):
+        # PID exists but could be a different process; report "unknown".
         return JobStatus(
             job_id=job_id,
             agent_id=meta["agent_id"],
             pid=pid,
-            state="running",
+            state="unknown",
             exit_code=None,
             started_at=meta["started_at"],
             ended_at=None,
@@ -236,16 +239,16 @@ def poll(job_id: str, *, jobs_dir: Path | None = None) -> JobStatus:
             worktree=meta.get("worktree"),
         )
 
-    # PID is dead but no status file — process ended between sessions
-    _write_status(job_dir, "completed", None)
+    # PID is dead and no status file — process ended between sessions
+    _write_status(job_dir, "lost", None)
     return JobStatus(
         job_id=job_id,
         agent_id=meta["agent_id"],
         pid=pid,
-        state="completed",
+        state="lost",
         exit_code=None,
         started_at=meta["started_at"],
-        ended_at=time.time(),
+        ended_at=None,
         duration_s=None,
         log_dir=str(job_dir),
         worktree=meta.get("worktree"),
@@ -307,18 +310,9 @@ def kill_job(job_id: str, *, jobs_dir: Path | None = None) -> bool:
         del _handles[job_id]
         return True
 
-    # Cross-session: signal by PID
-    if _pid_alive(pid):
-        try:
-            os.kill(pid, signal.SIGTERM)
-            time.sleep(1)
-            if _pid_alive(pid):
-                os.kill(pid, signal.SIGKILL)
-        except OSError:
-            pass
-        _write_status(job_dir, "killed", None)
-        return True
-
+    # Cross-session: we only have the PID and cannot verify it still
+    # belongs to the original job (PIDs are recycled).  Refuse to signal
+    # rather than risk killing an unrelated process.
     return False
 
 

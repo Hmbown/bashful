@@ -19,7 +19,8 @@ def generate_skill_doc(*, include_state: bool = False) -> str:
     agent_rows = []
     for a in agents:
         headless = a.invocation if a.headless else "(interactive only)"
-        agent_rows.append(f"| {a.name} | `{a.executable}` | `{headless}` |")
+        modes = ", ".join(a.modes)
+        agent_rows.append(f"| {a.name} | `{a.executable}` | `{headless}` | {modes} |")
     agents_table = "\n".join(agent_rows)
 
     doc = _TEMPLATE.format(
@@ -86,9 +87,13 @@ def get_skill_metadata() -> dict:
         "name": "bashful",
         "version": __version__,
         "description": "Bash-native agent CLI discovery and orchestration toolkit",
-        "agents": [a.id for a in agents],
+        "agents": [
+            {"id": a.id, "modes": a.modes} for a in agents
+        ],
+        "modes": ["read", "write"],
+        "default_mode": "read",
         "commands": [
-            "list", "doctor", "show", "run", "ping", "versions",
+            "list", "doctor", "show", "run", "fanout", "ping", "versions",
             "launch", "jobs", "logs", "kill",
             "worktree create", "worktree list", "worktree remove",
             "skill",
@@ -108,8 +113,29 @@ isolates work in git worktrees.
 Use bashful when you need to:
 - Find out which agent CLIs are available
 - Dispatch a prompt to a specific agent
+- Run the same prompt across multiple agents (fanout)
 - Launch long-running agent work in the background
 - Run agents in isolated git worktrees for parallel work
+
+**Bashful vs ACZ:** ACZ is a protocol-level bridge that connects running agents
+via MCP. Bashful operates one layer below: it manages the agent *binaries*
+themselves — detecting what's installed, launching processes, and supervising
+sessions. The two are complementary.
+
+## Execution Modes
+
+Bashful supports execution modes as a signal of intent.  The default is always
+`read`.  Modes map to **agent-specific CLI flags** (e.g. `--allowedTools` for
+Claude, `--approval-policy` for Codex) but bashful itself does not sandbox the
+agent — enforcement depends on each agent's own CLI behaviour.
+
+| Mode | Description |
+|------|-------------|
+| `read` | Default. Signals a read-only query. No write-enabling flags are passed. |
+| `write` | Signals that the agent should be allowed to modify files. Agent-specific write flags are appended. Must be explicitly requested. |
+
+Not all agents support `write` mode.  Requesting an unsupported mode produces a
+clear error.  Use `bashful show <agent>` to check which modes an agent supports.
 
 ## Commands
 
@@ -120,8 +146,9 @@ Use bashful when you need to:
 | `bashful show <agent>` | Show full details for a specific agent |
 | `bashful versions [agent]` | Print version info for installed agents |
 | `bashful ping [agent] [--live]` | Health check (version + optional API ping) |
-| `bashful run <agent> "prompt"` | Run an agent with a prompt (headless, blocking) |
-| `bashful launch <agent> "prompt"` | Launch a background job |
+| `bashful run <agent> "prompt" [-m mode]` | Run an agent with a prompt (headless, blocking) |
+| `bashful fanout agent1,agent2 "prompt"` | Run the same prompt across multiple agents |
+| `bashful launch <agent> "prompt" [-m mode]` | Launch a background job |
 | `bashful jobs` | List all jobs and their status |
 | `bashful logs <job_id>` | Read stdout/stderr from a job |
 | `bashful kill <job_id>` | Kill a running job |
@@ -132,8 +159,8 @@ Use bashful when you need to:
 
 ## Supported Agents
 
-| Agent | Executable | Headless invocation |
-|-------|-----------|---------------------|
+| Agent | Executable | Headless invocation | Modes |
+|-------|-----------|---------------------|-------|
 {agents_table}
 
 ## Workflows
@@ -149,15 +176,35 @@ bashful versions
 
 ```bash
 bashful run gemini "Explain this error message"
-bashful run codex "Write a Dockerfile for a Python Flask app" -o json
+bashful run codex "Write a Dockerfile for a Python Flask app"
 bashful run claude "Review this function for bugs" -v
 ```
 
-### 3. Launch background work
+### 3. Run with write mode (explicit opt-in)
+
+```bash
+bashful run claude "Fix the type error in main.py" -m write
+bashful run codex "Add unit tests for auth.py" -m write
+```
+
+### 4. Multi-agent fanout
+
+```bash
+# Ask the same question to multiple agents
+bashful fanout claude,codex,gemini "What's the best way to handle errors in Go?"
+
+# Fanout with write mode
+bashful fanout claude,codex "Add a docstring to main()" -m write
+```
+
+### 5. Launch background work
 
 ```bash
 # Start a job
 bashful launch claude "Refactor the auth module"
+
+# Start a write-mode job
+bashful launch claude "Refactor the auth module" -m write
 
 # Check status
 bashful jobs
@@ -169,7 +216,7 @@ bashful logs <job_id>
 bashful kill <job_id>
 ```
 
-### 4. Parallel work with worktree isolation
+### 6. Parallel work with worktree isolation
 
 ```bash
 # Create isolated worktrees
@@ -189,20 +236,13 @@ bashful worktree remove fix-auth
 bashful worktree remove add-tests
 ```
 
-### 5. Multi-agent comparison
-
-```bash
-# Ask the same question to multiple agents
-bashful run claude "What's the best way to handle errors in Go?"
-bashful run gemini "What's the best way to handle errors in Go?"
-bashful run codex "What's the best way to handle errors in Go?"
-```
-
 ## Tips
 
 - Use `bashful run` for quick, synchronous queries.
+- Use `bashful fanout` to compare answers from multiple agents.
 - Use `bashful launch` for work that takes more than a few seconds.
 - Use `--isolate` with `launch` to prevent agents from conflicting.
+- Use `-m write` only when you need the agent to modify files.
 - Use `bashful ping --live` to verify API connectivity before launching work.
 - Logs persist in `~/.bashful/jobs/` — check old results anytime.
 - Worktrees live as siblings of your repo in `.bashful-worktrees/`.

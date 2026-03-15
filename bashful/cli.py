@@ -7,7 +7,7 @@ import sys
 import time
 
 from bashful import __version__
-from bashful.agents import get_agent, load_agents
+from bashful.agents import DEFAULT_MODE, VALID_MODES, get_agent, load_agents
 from bashful.discovery import check_agent, discover
 
 
@@ -58,6 +58,7 @@ def cmd_show(args: argparse.Namespace) -> None:
         print(f"  Path:        {result.path}")
     print(f"  Description: {agent.description}")
     print(f"  Invocation:  {agent.invocation}")
+    print(f"  Modes:       {', '.join(agent.modes)}")
     if agent.headless:
         print(f"  Headless:    {agent.headless.style} mode")
         if agent.headless.output_formats:
@@ -90,6 +91,7 @@ def cmd_run(args: argparse.Namespace) -> None:
             prompt,
             timeout=args.timeout,
             output_format=args.output_format,
+            mode=args.mode,
         )
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)
@@ -101,6 +103,7 @@ def cmd_run(args: argparse.Namespace) -> None:
     if args.verbose:
         print(f"\n--- bashful run metadata ---", file=sys.stderr)
         print(f"  agent:     {result.agent_id}", file=sys.stderr)
+        print(f"  mode:      {result.mode}", file=sys.stderr)
         print(f"  command:   {' '.join(result.command)}", file=sys.stderr)
         print(f"  exit_code: {result.exit_code}", file=sys.stderr)
         print(f"  duration:  {result.duration_s}s", file=sys.stderr)
@@ -111,6 +114,60 @@ def cmd_run(args: argparse.Namespace) -> None:
 
     if not result.ok:
         sys.exit(result.exit_code if result.exit_code > 0 else 1)
+
+
+# ---------------------------------------------------------------------------
+# Fanout command
+# ---------------------------------------------------------------------------
+
+def cmd_fanout(args: argparse.Namespace) -> None:
+    """Run the same prompt across multiple agents sequentially."""
+    from bashful.fanout import fanout
+
+    agent_ids = [a.strip() for a in args.agents.split(",") if a.strip()]
+    if not agent_ids:
+        print("No agents specified.", file=sys.stderr)
+        sys.exit(1)
+
+    prompt = " ".join(args.prompt)
+    if not prompt:
+        print("No prompt provided.", file=sys.stderr)
+        sys.exit(1)
+
+    results = fanout(
+        agent_ids,
+        prompt,
+        timeout=args.timeout,
+        output_format=args.output_format,
+        mode=args.mode,
+    )
+
+    # Print results with clear separation
+    from bashful.fanout import FanoutError
+
+    any_failed = False
+    for i, (agent_id, result) in enumerate(results):
+        if i > 0:
+            print()
+        if result.ok:
+            marker = "OK"
+        elif result.timed_out:
+            marker = "TIMEOUT"
+            any_failed = True
+        else:
+            marker = f"FAIL(exit={result.exit_code})"
+            any_failed = True
+        print(f"--- {agent_id} [{marker}] ---")
+        if isinstance(result, FanoutError):
+            print(result.error)
+        else:
+            if result.stdout.strip():
+                print(result.stdout.strip())
+            if not result.ok and result.stderr.strip():
+                print(f"  stderr: {result.stderr.strip()[:200]}", file=sys.stderr)
+
+    if any_failed:
+        sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +242,17 @@ def cmd_launch(args: argparse.Namespace) -> None:
         print("No prompt provided.", file=sys.stderr)
         sys.exit(1)
 
+    # Validate mode
+    mode = args.mode
+    if not agent.supports_mode(mode):
+        supported = ", ".join(agent.modes)
+        print(
+            f"Error: Agent {agent.id!r} does not support mode {mode!r} "
+            f"(supported: {supported})",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     worktree_path = None
     if args.isolate:
         from bashful.worktree import create_worktree
@@ -202,6 +270,7 @@ def cmd_launch(args: argparse.Namespace) -> None:
             prompt,
             cwd=args.cwd,
             worktree=worktree_path,
+            mode=mode,
         )
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)
@@ -209,6 +278,7 @@ def cmd_launch(args: argparse.Namespace) -> None:
 
     print(f"  Launched job {job.job_id}")
     print(f"    agent: {job.agent_id}")
+    print(f"    mode:  {mode}")
     print(f"    pid:   {job.pid}")
     print(f"    cwd:   {job.cwd}")
     if job.worktree:
@@ -378,7 +448,18 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("prompt", nargs="+", help="The prompt to send")
     run_p.add_argument("-t", "--timeout", type=float, default=60.0, help="Timeout in seconds")
     run_p.add_argument("-o", "--output-format", help="Output format (text, json, stream-json)")
+    run_p.add_argument("-m", "--mode", default=DEFAULT_MODE, choices=VALID_MODES,
+                       help=f"Execution mode (default: {DEFAULT_MODE})")
     run_p.add_argument("-v", "--verbose", action="store_true", help="Print run metadata to stderr")
+
+    # Fanout
+    fanout_p = sub.add_parser("fanout", help="Run the same prompt across multiple agents")
+    fanout_p.add_argument("agents", help="Comma-separated agent ids (e.g. claude,codex,gemini)")
+    fanout_p.add_argument("prompt", nargs="+", help="The prompt to send")
+    fanout_p.add_argument("-t", "--timeout", type=float, default=60.0, help="Timeout per agent")
+    fanout_p.add_argument("-o", "--output-format", help="Output format")
+    fanout_p.add_argument("-m", "--mode", default=DEFAULT_MODE, choices=VALID_MODES,
+                          help=f"Execution mode (default: {DEFAULT_MODE})")
 
     # Health
     ping_p = sub.add_parser("ping", help="Check agent health")
@@ -396,6 +477,8 @@ def build_parser() -> argparse.ArgumentParser:
     launch_p.add_argument("prompt", nargs="+", help="The prompt to send")
     launch_p.add_argument("--cwd", help="Working directory")
     launch_p.add_argument("--isolate", action="store_true", help="Run in a fresh git worktree")
+    launch_p.add_argument("-m", "--mode", default=DEFAULT_MODE, choices=VALID_MODES,
+                          help=f"Execution mode (default: {DEFAULT_MODE})")
 
     jobs_p = sub.add_parser("jobs", help="List background jobs")
     jobs_p.add_argument("--running", action="store_true", help="Show only running jobs")
@@ -440,6 +523,7 @@ def main(argv: list[str] | None = None) -> None:
         "doctor": cmd_doctor,
         "show": cmd_show,
         "run": cmd_run,
+        "fanout": cmd_fanout,
         "ping": cmd_ping,
         "versions": cmd_version,
         "launch": cmd_launch,

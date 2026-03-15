@@ -183,7 +183,27 @@ class TestPoll:
         with patch("bashful.supervisor._pid_alive", return_value=False):
             status = poll("deadjob", jobs_dir=tmp_path)
 
-        assert status.state == "completed"
+        assert status.state == "lost"
+
+    def test_cross_session_alive_pid_reports_unknown(self, tmp_path):
+        """Job from previous session with alive PID → unknown (can't trust PID)."""
+        job_dir = tmp_path / "alivejob"
+        job_dir.mkdir()
+        meta = {
+            "job_id": "alivejob",
+            "agent_id": "test",
+            "prompt": "old",
+            "pid": 999999,
+            "command": ["test"],
+            "cwd": "/tmp",
+            "started_at": time.time() - 100,
+        }
+        (job_dir / "meta.json").write_text(json.dumps(meta))
+
+        with patch("bashful.supervisor._pid_alive", return_value=True):
+            status = poll("alivejob", jobs_dir=tmp_path)
+
+        assert status.state == "unknown"
 
     def test_status_file_cached(self, tmp_path):
         """Once status.json is written, it's used directly."""
@@ -277,6 +297,20 @@ class TestKillJob:
         killed = kill_job(job.job_id, jobs_dir=tmp_path)
         assert killed
         mock_proc.terminate.assert_called_once()
+
+    def test_cross_session_kill_refused(self, tmp_path):
+        """Cross-session kill (PID only) should be refused for safety."""
+        job_dir = tmp_path / "crossjob"
+        job_dir.mkdir()
+        (job_dir / "meta.json").write_text(json.dumps({
+            "job_id": "crossjob", "agent_id": "t", "prompt": "t",
+            "pid": 999999, "command": [], "cwd": "/", "started_at": 0,
+        }))
+
+        # No Popen handle, PID alive — should refuse to kill
+        with patch("bashful.supervisor._pid_alive", return_value=True):
+            killed = kill_job("crossjob", jobs_dir=tmp_path)
+        assert not killed
 
     def test_kill_already_done(self, tmp_path):
         job_dir = tmp_path / "done"

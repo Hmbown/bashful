@@ -89,7 +89,10 @@ class TestCreateWorktree:
 class TestListWorktrees:
     def test_empty(self, tmp_path):
         wt_file = tmp_path / "worktrees.json"
-        with patch("bashful.worktree.WORKTREES_FILE", wt_file):
+        with (
+            patch("bashful.worktree.WORKTREES_FILE", wt_file),
+            patch("bashful.worktree._repo_root", return_value="/repo"),
+        ):
             assert list_worktrees() == []
 
     def test_prunes_stale(self, tmp_path):
@@ -98,12 +101,15 @@ class TestListWorktrees:
         valid_path = tmp_path / "valid"
         valid_path.mkdir()
         data = [
-            {"name": "valid", "path": str(valid_path), "branch": "b", "base_ref": "HEAD", "created_at": 0},
-            {"name": "stale", "path": "/nonexistent/path", "branch": "b", "base_ref": "HEAD", "created_at": 0},
+            {"name": "valid", "path": str(valid_path), "branch": "b", "base_ref": "HEAD", "created_at": 0, "repo": "/repo"},
+            {"name": "stale", "path": "/nonexistent/path", "branch": "b", "base_ref": "HEAD", "created_at": 0, "repo": "/repo"},
         ]
         wt_file.write_text(json.dumps(data))
 
-        with patch("bashful.worktree.WORKTREES_FILE", wt_file):
+        with (
+            patch("bashful.worktree.WORKTREES_FILE", wt_file),
+            patch("bashful.worktree._repo_root", return_value="/repo"),
+        ):
             result = list_worktrees()
 
         assert len(result) == 1
@@ -112,6 +118,47 @@ class TestListWorktrees:
         saved = json.loads(wt_file.read_text())
         assert len(saved) == 1
 
+    def test_filters_by_repo(self, tmp_path):
+        """Worktrees from a different repo should not appear."""
+        wt_file = tmp_path / "worktrees.json"
+        path_a = tmp_path / "wt-a"
+        path_b = tmp_path / "wt-b"
+        path_a.mkdir()
+        path_b.mkdir()
+        data = [
+            {"name": "wt-a", "path": str(path_a), "branch": "b", "base_ref": "HEAD", "created_at": 0, "repo": "/repo-a"},
+            {"name": "wt-b", "path": str(path_b), "branch": "b", "base_ref": "HEAD", "created_at": 0, "repo": "/repo-b"},
+        ]
+        wt_file.write_text(json.dumps(data))
+
+        with (
+            patch("bashful.worktree.WORKTREES_FILE", wt_file),
+            patch("bashful.worktree._repo_root", return_value="/repo-a"),
+        ):
+            result = list_worktrees()
+
+        assert len(result) == 1
+        assert result[0].name == "wt-a"
+
+    def test_legacy_worktrees_without_repo_included(self, tmp_path):
+        """Worktrees without a repo field (legacy) should still be listed."""
+        wt_file = tmp_path / "worktrees.json"
+        wt_path = tmp_path / "legacy"
+        wt_path.mkdir()
+        data = [
+            {"name": "legacy", "path": str(wt_path), "branch": "b", "base_ref": "HEAD", "created_at": 0},
+        ]
+        wt_file.write_text(json.dumps(data))
+
+        with (
+            patch("bashful.worktree.WORKTREES_FILE", wt_file),
+            patch("bashful.worktree._repo_root", return_value="/any-repo"),
+        ):
+            result = list_worktrees()
+
+        assert len(result) == 1
+        assert result[0].name == "legacy"
+
 
 class TestGetWorktree:
     def test_found(self, tmp_path):
@@ -119,18 +166,24 @@ class TestGetWorktree:
         wt_path = tmp_path / "wt"
         wt_path.mkdir()
         data = [
-            {"name": "mine", "path": str(wt_path), "branch": "b", "base_ref": "HEAD", "created_at": 0},
+            {"name": "mine", "path": str(wt_path), "branch": "b", "base_ref": "HEAD", "created_at": 0, "repo": "/repo"},
         ]
         wt_file.write_text(json.dumps(data))
 
-        with patch("bashful.worktree.WORKTREES_FILE", wt_file):
+        with (
+            patch("bashful.worktree.WORKTREES_FILE", wt_file),
+            patch("bashful.worktree._repo_root", return_value="/repo"),
+        ):
             wt = get_worktree("mine")
         assert wt is not None
         assert wt.name == "mine"
 
     def test_not_found(self, tmp_path):
         wt_file = tmp_path / "worktrees.json"
-        with patch("bashful.worktree.WORKTREES_FILE", wt_file):
+        with (
+            patch("bashful.worktree.WORKTREES_FILE", wt_file),
+            patch("bashful.worktree._repo_root", return_value="/repo"),
+        ):
             assert get_worktree("nope") is None
 
 
@@ -140,7 +193,7 @@ class TestRemoveWorktree:
         wt_path = tmp_path / "wt"
         wt_path.mkdir()
         data = [
-            {"name": "rm-me", "path": str(wt_path), "branch": "bashful/rm-me", "base_ref": "HEAD", "created_at": 0},
+            {"name": "rm-me", "path": str(wt_path), "branch": "bashful/rm-me", "base_ref": "HEAD", "created_at": 0, "repo": str(tmp_path)},
         ]
         wt_file.write_text(json.dumps(data))
 
@@ -159,5 +212,8 @@ class TestRemoveWorktree:
 
     def test_remove_not_found(self, tmp_path):
         wt_file = tmp_path / "worktrees.json"
-        with patch("bashful.worktree.WORKTREES_FILE", wt_file):
+        with (
+            patch("bashful.worktree.WORKTREES_FILE", wt_file),
+            patch("bashful.worktree._repo_root", return_value="/repo"),
+        ):
             assert remove_worktree("nope") is False

@@ -7,7 +7,7 @@ import subprocess
 import time
 from dataclasses import dataclass
 
-from bashful.agents import AgentInfo
+from bashful.agents import DEFAULT_MODE, VALID_MODES, AgentInfo
 
 
 @dataclass(frozen=True)
@@ -19,6 +19,7 @@ class RunResult:
     exit_code: int
     duration_s: float
     timed_out: bool = False
+    mode: str = DEFAULT_MODE
 
     @property
     def ok(self) -> bool:
@@ -32,6 +33,7 @@ def run_agent(
     timeout: float = 60.0,
     cwd: str | None = None,
     output_format: str | None = None,
+    mode: str = DEFAULT_MODE,
 ) -> RunResult:
     """Run an agent CLI in headless mode and return the result.
 
@@ -41,13 +43,25 @@ def run_agent(
         timeout: Max seconds to wait (default 60).
         cwd: Working directory for the subprocess.
         output_format: Output format override (e.g. "text", "json").
+        mode: Execution mode — "read" (default) or "write".
 
     Returns:
         RunResult with stdout, stderr, exit code, and timing.
 
     Raises:
-        ValueError: If the agent has no headless profile or is not installed.
+        ValueError: If the agent has no headless profile, is not installed,
+            or does not support the requested mode.
     """
+    if mode not in VALID_MODES:
+        raise ValueError(f"Invalid mode {mode!r}; must be one of {VALID_MODES}")
+
+    if not agent.supports_mode(mode):
+        supported = ", ".join(agent.modes)
+        raise ValueError(
+            f"Agent {agent.id!r} does not support mode {mode!r} "
+            f"(supported: {supported})"
+        )
+
     if agent.headless is None:
         raise ValueError(f"Agent {agent.id!r} has no headless invocation profile")
 
@@ -55,7 +69,7 @@ def run_agent(
     if resolved is None:
         raise ValueError(f"Agent {agent.id!r} executable {agent.executable!r} not found in PATH")
 
-    cmd = agent.headless.build_command(resolved, prompt, output_format)
+    cmd = agent.headless.build_command(resolved, prompt, output_format, mode=mode)
 
     t0 = time.monotonic()
     timed_out = False
@@ -85,6 +99,7 @@ def run_agent(
         exit_code=exit_code,
         duration_s=round(duration, 2),
         timed_out=timed_out,
+        mode=mode,
     )
 
 

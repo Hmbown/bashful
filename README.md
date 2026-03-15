@@ -19,17 +19,31 @@ pip install -e .
 ```bash
 bashful list                # List all agents and install status
 bashful doctor              # Readiness report
-bashful show claude         # Details for a specific agent
+bashful show claude         # Details for a specific agent (includes modes)
 bashful versions            # Version info for all installed agents
 ```
 
 ### Running agents
 
 ```bash
-# One-shot headless prompt (blocking)
+# One-shot headless prompt (blocking, default read mode)
 bashful run gemini "What is the capital of France?"
 bashful run codex "Fix the type error in main.py" -v
 bashful run claude "Explain this function" -t 30 -o json
+
+# Explicit write mode (agent must support it)
+bashful run claude "Fix the bug in auth.py" -m write
+bashful run codex "Add tests for utils.py" -m write
+```
+
+### Multi-agent fanout
+
+```bash
+# Run the same prompt across multiple agents
+bashful fanout claude,codex,gemini "What's the best way to handle errors in Go?"
+
+# With timeout and mode
+bashful fanout claude,codex "Add a docstring to main()" -m write -t 120
 ```
 
 ### Health checks
@@ -44,6 +58,7 @@ bashful ping gemini --live -v
 
 ```bash
 bashful launch claude "Refactor the auth module"
+bashful launch claude "Fix the auth bug" -m write  # write mode
 bashful jobs                # List all jobs
 bashful jobs --running      # Only running jobs
 bashful logs <job_id>       # Read stdout
@@ -76,22 +91,37 @@ bashful skill --live
 bashful skill --json
 ```
 
+## Execution modes
+
+Bashful supports execution modes as a signal of intent.  Modes map to
+**agent-specific CLI flags** (e.g. `--allowedTools` for Claude,
+`--approval-policy` for Codex) but bashful itself does not sandbox the agent —
+enforcement depends on each agent's own CLI behaviour.
+
+| Mode | Description |
+|------|-------------|
+| `read` | Default. Signals a read-only query. No write-enabling flags are passed. |
+| `write` | Signals that the agent should modify files. Agent-specific write flags are appended. Must be explicitly requested via `-m write`. |
+
+Not all agents support `write` mode. Use `bashful show <agent>` to check.
+
 ## Supported agents
 
-| Agent | Executable | Headless mode |
-|-------|-----------|--------------|
-| Claude Code | `claude` | `claude -p "prompt"` |
-| OpenAI Codex | `codex` | `codex exec "prompt"` |
-| GitHub Copilot | `gh copilot` | `gh copilot -p "prompt" --allow-all-tools` |
-| Gemini CLI | `gemini` | `gemini -p "prompt" -o text` |
-| Qwen CLI | `qwen` | `qwen -p "prompt" -o text` |
-| OpenCode | `opencode` | `opencode run "prompt"` |
+| Agent | Executable | Headless mode | Modes |
+|-------|-----------|--------------|-------|
+| Claude Code | `claude` | `claude -p "prompt"` | read, write |
+| OpenAI Codex | `codex` | `codex exec "prompt"` | read, write |
+| GitHub Copilot | `gh copilot` | `gh copilot -p "prompt" --allow-all-tools` | read |
+| Gemini CLI | `gemini` | `gemini -p "prompt" -o text` | read |
+| Qwen CLI | `qwen` | `qwen -p "prompt" -o text` | read |
+| OpenCode | `opencode` | `opencode run "prompt"` | read |
 
 ## Architecture
 
-- **Agent catalog** (`bashful/data/agents.json`) — machine-readable inventory with headless invocation profiles
+- **Agent catalog** (`bashful/data/agents.json`) — machine-readable inventory with headless invocation profiles and per-agent execution modes
 - **Discovery** (`bashful/discovery.py`) — detects installed agents via `shutil.which`
-- **Runner** (`bashful/runner.py`) — runs agents as subprocesses with timeout/capture
+- **Runner** (`bashful/runner.py`) — runs agents as subprocesses with timeout/capture and mode support
+- **Fanout** (`bashful/fanout.py`) — sequential multi-agent fanout for running the same prompt across agents
 - **Health** (`bashful/health.py`) — version + live ping checks
 - **Supervisor** (`bashful/supervisor.py`) — background job management with file-based state
 - **Worktree** (`bashful/worktree.py`) — git worktree isolation for parallel work

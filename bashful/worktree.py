@@ -19,6 +19,7 @@ class WorktreeInfo:
     branch: str
     base_ref: str
     created_at: float
+    repo: str | None = None
     job_id: str | None = None
 
 
@@ -111,6 +112,7 @@ def create_worktree(
         branch=branch,
         base_ref=base_ref,
         created_at=time.time(),
+        repo=root,
         job_id=job_id,
     )
 
@@ -122,26 +124,40 @@ def create_worktree(
     return wt
 
 
-def list_worktrees() -> list[WorktreeInfo]:
-    """List all bashful-managed worktrees."""
-    worktrees = _load_worktrees()
+def list_worktrees(*, repo_dir: str | None = None) -> list[WorktreeInfo]:
+    """List bashful-managed worktrees for the current repo.
 
-    # Validate each still exists on disk
-    valid = []
-    for wt in worktrees:
-        if Path(wt.path).exists():
-            valid.append(wt)
+    Only returns worktrees whose ``repo`` matches the current (or given)
+    repository root.  Worktrees created before the ``repo`` field existed
+    (``repo is None``) are included as a migration courtesy.
+    """
+    try:
+        root = _repo_root(repo_dir)
+    except RuntimeError:
+        root = None
 
-    # Save back if we pruned stale entries
-    if len(valid) != len(worktrees):
-        _save_worktrees(valid)
+    all_wts = _load_worktrees()
 
-    return valid
+    # Validate: exists on disk AND belongs to this repo
+    valid_all: list[WorktreeInfo] = []
+    result: list[WorktreeInfo] = []
+    for wt in all_wts:
+        if not Path(wt.path).exists():
+            continue
+        valid_all.append(wt)
+        if root is not None and (wt.repo is None or wt.repo == root):
+            result.append(wt)
+
+    # Prune disk-missing entries globally
+    if len(valid_all) != len(all_wts):
+        _save_worktrees(valid_all)
+
+    return result
 
 
-def get_worktree(name: str) -> WorktreeInfo | None:
-    """Look up a worktree by name."""
-    for wt in list_worktrees():
+def get_worktree(name: str, *, repo_dir: str | None = None) -> WorktreeInfo | None:
+    """Look up a worktree by name within the current repo."""
+    for wt in list_worktrees(repo_dir=repo_dir):
         if wt.name == name:
             return wt
     return None
@@ -157,7 +173,7 @@ def remove_worktree(
 
     Returns True if the worktree was removed.
     """
-    wt = get_worktree(name)
+    wt = get_worktree(name, repo_dir=repo_dir)
     if wt is None:
         return False
 
