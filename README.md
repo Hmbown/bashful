@@ -62,6 +62,39 @@ bashful compare claude,codex,gemini "Best approach?" --judge claude
 bashful compare claude,codex "Review this code" --parallel
 ```
 
+### Structured review
+
+```bash
+# Get critique from multiple agents
+bashful review claude,codex "Review this plan for risks."
+
+# Synthesize reviews with a judge
+bashful review claude,codex "Review this plan for risks." --judge claude
+
+# Parallel reviews
+bashful review claude,codex,gemini "Audit this code for security" --parallel
+```
+
+### Dialectic (thesis / antithesis / synthesis)
+
+```bash
+# Two agents argue opposing sides
+bashful dialectic claude,codex "Should this tool prefer local-first routing?"
+
+# Add synthesis via a judge
+bashful dialectic claude,codex "Should we use a monorepo?" --judge claude
+```
+
+### Configuration
+
+```bash
+# Show current config state and overrides
+bashful config
+
+# User overrides live in ~/.bashful/config.json, e.g.:
+# {"agents": {"gemini": {"modes": ["read", "write"]}}}
+```
+
 ### Artifacts
 
 ```bash
@@ -157,6 +190,9 @@ Not all agents support `write` mode. Use `bashful show <agent>` to check.
 - **Runner** (`bashful/runner.py`) — runs agents as subprocesses with timeout/capture and mode support
 - **Fanout** (`bashful/fanout.py`) — multi-agent fanout (sequential or parallel) for running the same prompt across agents
 - **Compare** (`bashful/compare.py`) — compare mode with optional judge agent
+- **Review** (`bashful/review.py`) — structured critique via multi-agent review with optional synthesis
+- **Dialectic** (`bashful/dialectic.py`) — thesis/antithesis/synthesis workflow
+- **Config** (`bashful/config.py`) — user configuration overrides for agent capabilities
 - **Normalize** (`bashful/normalize.py`) — lightweight result normalization helpers
 - **Artifacts** (`bashful/artifacts.py`) — lightweight JSON artifact persistence for run/fanout results
 - **Health** (`bashful/health.py`) — version + live ping checks

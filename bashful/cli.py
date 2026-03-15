@@ -572,6 +572,154 @@ def cmd_wt_remove(args: argparse.Namespace) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Config command
+# ---------------------------------------------------------------------------
+
+def cmd_config(_args: argparse.Namespace) -> None:
+    """Show current configuration."""
+    from bashful.config import show_config
+    print(show_config())
+
+
+# ---------------------------------------------------------------------------
+# Review command
+# ---------------------------------------------------------------------------
+
+def cmd_review(args: argparse.Namespace) -> None:
+    """Run a structured review across agents."""
+    from bashful.review import review
+    from bashful.fanout import FanoutError
+
+    agent_ids = [a.strip() for a in args.agents.split(",") if a.strip()]
+    if not agent_ids:
+        print("No agents specified.", file=sys.stderr)
+        sys.exit(1)
+
+    prompt = " ".join(args.prompt)
+    if not prompt:
+        print("No prompt provided.", file=sys.stderr)
+        sys.exit(1)
+
+    data = review(
+        agent_ids,
+        prompt,
+        timeout=args.timeout,
+        output_format=args.output_format,
+        mode=args.mode,
+        parallel=args.parallel,
+        judge=args.judge,
+        judge_timeout=args.judge_timeout,
+    )
+
+    any_failed = False
+    for i, (agent_id, result) in enumerate(data["results"]):
+        if i > 0:
+            print()
+        if result.ok:
+            marker = "OK"
+        elif getattr(result, "timed_out", False):
+            marker = "TIMEOUT"
+            any_failed = True
+        else:
+            marker = f"FAIL(exit={result.exit_code})"
+            any_failed = True
+        print(f"--- reviewer: {agent_id} [{marker}] ---")
+        if isinstance(result, FanoutError):
+            print(result.error)
+        elif result.stdout.strip():
+            print(result.stdout.strip())
+
+    if data["judge"]:
+        j = data["judge"]
+        print(f"\n=== synthesis: {j['agent']} ===")
+        if j["ok"]:
+            print(j.get("stdout", ""))
+        else:
+            print(f"[synthesis error: {j.get('error', 'unknown')}]")
+
+    if any_failed:
+        sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# Dialectic command
+# ---------------------------------------------------------------------------
+
+def cmd_dialectic(args: argparse.Namespace) -> None:
+    """Run a thesis/antithesis/synthesis dialectic."""
+    from bashful.dialectic import dialectic
+    from bashful.fanout import FanoutError
+
+    agents = [a.strip() for a in args.agents.split(",") if a.strip()]
+    if len(agents) != 2:
+        print("Dialectic requires exactly two agents (e.g. claude,codex).", file=sys.stderr)
+        sys.exit(1)
+
+    question = " ".join(args.prompt)
+    if not question:
+        print("No question provided.", file=sys.stderr)
+        sys.exit(1)
+
+    data = dialectic(
+        agents[0],
+        agents[1],
+        question,
+        timeout=args.timeout,
+        output_format=args.output_format,
+        mode=args.mode,
+        judge=args.judge,
+        judge_timeout=args.judge_timeout,
+    )
+
+    any_failed = False
+
+    # Thesis
+    t_id, t_result = data["thesis"]
+    if t_result.ok:
+        t_marker = "OK"
+    elif getattr(t_result, "timed_out", False):
+        t_marker = "TIMEOUT"
+        any_failed = True
+    else:
+        t_marker = f"FAIL(exit={t_result.exit_code})"
+        any_failed = True
+    print(f"--- thesis: {t_id} [{t_marker}] ---")
+    if isinstance(t_result, FanoutError):
+        print(t_result.error)
+    elif t_result.stdout.strip():
+        print(t_result.stdout.strip())
+
+    # Antithesis
+    print()
+    a_id, a_result = data["antithesis"]
+    if a_result.ok:
+        a_marker = "OK"
+    elif getattr(a_result, "timed_out", False):
+        a_marker = "TIMEOUT"
+        any_failed = True
+    else:
+        a_marker = f"FAIL(exit={a_result.exit_code})"
+        any_failed = True
+    print(f"--- antithesis: {a_id} [{a_marker}] ---")
+    if isinstance(a_result, FanoutError):
+        print(a_result.error)
+    elif a_result.stdout.strip():
+        print(a_result.stdout.strip())
+
+    # Synthesis
+    if data["synthesis"]:
+        s = data["synthesis"]
+        print(f"\n=== synthesis: {s['agent']} ===")
+        if s["ok"]:
+            print(s.get("stdout", ""))
+        else:
+            print(f"[synthesis error: {s.get('error', 'unknown')}]")
+
+    if any_failed:
+        sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
 # Skill command
 # ---------------------------------------------------------------------------
 
@@ -701,6 +849,34 @@ def build_parser() -> argparse.ArgumentParser:
     wt_rm.add_argument("name", help="Worktree name")
     wt_rm.add_argument("--force", action="store_true", help="Force removal")
 
+    # Config
+    sub.add_parser("config", help="Show current configuration and overrides")
+
+    # Review
+    rev_p = sub.add_parser("review", help="Structured review across multiple agents")
+    rev_p.add_argument("agents", help="Comma-separated agent ids (e.g. claude,codex)")
+    rev_p.add_argument("prompt", nargs="+", help="The target or prompt to review")
+    rev_p.add_argument("-t", "--timeout", type=float, default=60.0, help="Timeout per agent")
+    rev_p.add_argument("-o", "--output-format", help="Output format")
+    rev_p.add_argument("-m", "--mode", default=DEFAULT_MODE, choices=VALID_MODES,
+                        help=f"Execution mode (default: {DEFAULT_MODE})")
+    rev_p.add_argument("--parallel", action="store_true", help="Run reviewers concurrently")
+    rev_p.add_argument("--judge", metavar="AGENT", help="Agent to synthesize reviews")
+    rev_p.add_argument("--judge-timeout", type=float, default=120.0,
+                        help="Timeout for judge agent (default: 120s)")
+
+    # Dialectic
+    dia_p = sub.add_parser("dialectic", help="Thesis/antithesis/synthesis dialectic")
+    dia_p.add_argument("agents", help="Exactly two comma-separated agent ids (e.g. claude,codex)")
+    dia_p.add_argument("prompt", nargs="+", help="The question to explore")
+    dia_p.add_argument("-t", "--timeout", type=float, default=60.0, help="Timeout per agent")
+    dia_p.add_argument("-o", "--output-format", help="Output format")
+    dia_p.add_argument("-m", "--mode", default=DEFAULT_MODE, choices=VALID_MODES,
+                        help=f"Execution mode (default: {DEFAULT_MODE})")
+    dia_p.add_argument("--judge", metavar="AGENT", help="Agent to synthesize the dialectic")
+    dia_p.add_argument("--judge-timeout", type=float, default=120.0,
+                        help="Timeout for judge agent (default: 120s)")
+
     # Skill
     skill_p = sub.add_parser("skill", help="Print the bashful skill document")
     skill_p.add_argument("--live", action="store_true", help="Include live system state")
@@ -720,6 +896,9 @@ def main(argv: list[str] | None = None) -> None:
         "run": cmd_run,
         "fanout": cmd_fanout,
         "compare": cmd_compare,
+        "review": cmd_review,
+        "dialectic": cmd_dialectic,
+        "config": cmd_config,
         "artifacts": cmd_artifacts,
         "ping": cmd_ping,
         "versions": cmd_version,

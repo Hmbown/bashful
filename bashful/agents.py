@@ -77,9 +77,19 @@ def _parse_headless(raw: dict[str, Any] | None) -> HeadlessProfile | None:
 
 
 def load_agents() -> list[AgentInfo]:
-    """Load the agent catalog from the bundled JSON file."""
+    """Load the agent catalog from the bundled JSON file.
+
+    Applies any per-agent overrides from ``~/.bashful/config.json``.
+    """
+    from bashful.config import apply_overrides, get_agent_overrides
+
     with open(DATA_FILE) as f:
         raw = json.load(f)
+
+    # Apply user config overrides before parsing
+    overrides = get_agent_overrides()
+    raw = apply_overrides(raw, overrides)
+
     agents = []
     for entry in raw:
         headless = _parse_headless(entry.pop("headless", None))

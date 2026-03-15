@@ -214,3 +214,68 @@ def test_artifacts_show_not_found(capsys, tmp_path, monkeypatch):
         main(["artifacts", "nonexistent"])
     err = capsys.readouterr().err
     assert "not found" in err
+
+
+# ---------------------------------------------------------------------------
+# Config command
+# ---------------------------------------------------------------------------
+
+def test_config_runs(capsys, tmp_path, monkeypatch):
+    monkeypatch.setattr("bashful.config.CONFIG_FILE", tmp_path / "nope.json")
+    main(["config"])
+    out = capsys.readouterr().out
+    assert "Config file" in out
+
+
+# ---------------------------------------------------------------------------
+# Review command
+# ---------------------------------------------------------------------------
+
+def test_review_parser():
+    from bashful.cli import build_parser
+    parser = build_parser()
+    args = parser.parse_args(["review", "claude,codex", "Check this.", "--judge", "claude"])
+    assert args.agents == "claude,codex"
+    assert args.prompt == ["Check this."]
+    assert args.judge == "claude"
+
+
+def test_review_parser_defaults():
+    from bashful.cli import build_parser
+    parser = build_parser()
+    args = parser.parse_args(["review", "claude,codex", "hello"])
+    assert args.judge is None
+    assert args.parallel is False
+    assert args.judge_timeout == 120.0
+
+
+# ---------------------------------------------------------------------------
+# Dialectic command
+# ---------------------------------------------------------------------------
+
+def test_dialectic_parser():
+    from bashful.cli import build_parser
+    parser = build_parser()
+    args = parser.parse_args(["dialectic", "claude,codex", "Monorepos?", "--judge", "claude"])
+    assert args.agents == "claude,codex"
+    assert args.prompt == ["Monorepos?"]
+    assert args.judge == "claude"
+
+
+def test_dialectic_parser_defaults():
+    from bashful.cli import build_parser
+    parser = build_parser()
+    args = parser.parse_args(["dialectic", "claude,codex", "question"])
+    assert args.judge is None
+    assert args.judge_timeout == 120.0
+
+
+def test_dialectic_rejects_wrong_agent_count(capsys):
+    from bashful.runner import RunResult
+
+    # The CLI handler should reject != 2 agents
+    with pytest.raises(SystemExit) as exc_info:
+        main(["dialectic", "claude", "question"])
+    assert exc_info.value.code == 1
+    err = capsys.readouterr().err
+    assert "exactly two" in err

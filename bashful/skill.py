@@ -94,6 +94,7 @@ def get_skill_metadata() -> dict:
         "default_mode": "read",
         "commands": [
             "list", "doctor", "show", "run", "fanout", "compare",
+            "review", "dialectic", "config",
             "ping", "versions",
             "launch", "jobs", "logs", "kill", "wait", "watch",
             "worktree create", "worktree list", "worktree remove",
@@ -117,6 +118,8 @@ Use bashful when you need to:
 - Dispatch a prompt to a specific agent
 - Run the same prompt across multiple agents (fanout)
 - Compare agent responses with an optional judge agent
+- Get structured reviews/critiques from multiple agents
+- Explore opposing strategies via thesis/antithesis dialectics
 - Launch long-running agent work in the background
 - Wait for or watch background jobs
 - Run agents in isolated git worktrees for parallel work
@@ -161,6 +164,11 @@ clear error.  Use `bashful show <agent>` to check which modes an agent supports.
 | `bashful fanout agent1,agent2 "prompt" --parallel` | Run fanout concurrently |
 | `bashful compare agent1,agent2 "prompt"` | Compare responses side-by-side |
 | `bashful compare agent1,agent2 "prompt" --judge claude` | Compare with a judge agent |
+| `bashful review agent1,agent2 "target"` | Structured review/critique from multiple agents |
+| `bashful review agent1,agent2 "target" --judge claude` | Review with synthesized assessment |
+| `bashful dialectic agent_a,agent_b "question"` | Thesis/antithesis dialectic |
+| `bashful dialectic agent_a,agent_b "question" --judge claude` | Dialectic with synthesis |
+| `bashful config` | Show current configuration and overrides |
 | `bashful launch <agent> "prompt" [-m mode]` | Launch a background job |
 | `bashful jobs` | List all jobs and their status |
 | `bashful logs <job_id>` | Read stdout/stderr from a job |
@@ -232,7 +240,30 @@ bashful compare claude,codex,gemini "Best way to handle errors?" --judge claude
 bashful compare claude,codex "Review this code" --parallel
 ```
 
-### 6. Save and inspect artifacts
+### 6. Structured review
+
+```bash
+# Get critique from multiple agents
+bashful review claude,codex "Review this plan for risks."
+
+# Synthesize reviews with a judge
+bashful review claude,codex "Review this plan for risks." --judge claude
+
+# Parallel reviews
+bashful review claude,codex,gemini "Audit this code for security" --parallel
+```
+
+### 7. Dialectic (thesis / antithesis / synthesis)
+
+```bash
+# Two agents argue opposing sides
+bashful dialectic claude,codex "Should this tool prefer local-first routing?"
+
+# Add synthesis via a judge
+bashful dialectic claude,codex "Should we use a monorepo?" --judge claude
+```
+
+### 8. Save and inspect artifacts
 
 ```bash
 # Save a run result
@@ -251,7 +282,7 @@ bashful artifacts run-claude-1710000000
 Artifacts are stored as JSON in `~/.bashful/artifacts/` and can be read by
 other tools (e.g. Hermes) for post-hoc analysis.
 
-### 7. Launch background work
+### 9. Launch background work
 
 ```bash
 # Start a job
@@ -276,7 +307,7 @@ bashful watch <job_id>
 bashful kill <job_id>
 ```
 
-### 8. Parallel work with worktree isolation
+### 10. Parallel work with worktree isolation
 
 ```bash
 # Create isolated worktrees
@@ -300,6 +331,8 @@ bashful worktree remove add-tests
 
 - Use `bashful run` for quick, synchronous queries.
 - Use `bashful compare` to compare agent responses with an optional `--judge`.
+- Use `bashful review` for critique-oriented workflows (plan/code/doc inspection).
+- Use `bashful dialectic` to explore opposing strategies or tradeoffs.
 - Use `bashful fanout` for multi-agent dispatch without judge overhead (`--parallel` for speed).
 - Use `--save` with `run` or `fanout` to persist results as artifacts.
 - Use `bashful launch` for work that takes more than a few seconds; follow with `wait` or `watch`.

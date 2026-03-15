@@ -62,6 +62,20 @@ class TestGenerateSkillDoc:
         assert "bashful compare" in doc
         assert "--judge" in doc
 
+    def test_contains_review_section(self):
+        doc = generate_skill_doc()
+        assert "bashful review" in doc
+        assert "Structured review" in doc
+
+    def test_contains_dialectic_section(self):
+        doc = generate_skill_doc()
+        assert "bashful dialectic" in doc
+        assert "Dialectic" in doc
+
+    def test_contains_config_command(self):
+        doc = generate_skill_doc()
+        assert "bashful config" in doc
+
     def test_contains_wait_watch(self):
         doc = generate_skill_doc()
         assert "bashful wait" in doc
@@ -122,6 +136,9 @@ class TestGetSkillMetadata:
         assert "skill" in meta["commands"]
         assert "fanout" in meta["commands"]
         assert "compare" in meta["commands"]
+        assert "review" in meta["commands"]
+        assert "dialectic" in meta["commands"]
+        assert "config" in meta["commands"]
         assert "wait" in meta["commands"]
         assert "watch" in meta["commands"]
         assert "artifacts" in meta["commands"]
