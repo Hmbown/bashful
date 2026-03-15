@@ -38,12 +38,12 @@
     "name": "GitHub Copilot CLI",
     "executable": "gh",
     "description": "GitHub's AI pair programmer, accessed via the gh CLI extension.",
-    "invocation": "gh copilot -p \"your prompt here\" --allow-all-tools",
+    "invocation": "gh copilot -p \"your prompt here\"",
     "subcommand": "copilot",
     "modes": ["read"],
     "headless": {
       "style": "subcommand",
-      "args": ["copilot", "-p", "{prompt}", "--allow-all-tools"]
+      "args": ["copilot", "-p", "{prompt}"]
     },
     "version_args": ["copilot", "--", "--version"]
   },

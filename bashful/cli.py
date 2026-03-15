@@ -112,6 +112,11 @@ def cmd_run(args: argparse.Namespace) -> None:
         if result.stderr.strip():
             print(f"  stderr:    {result.stderr.strip()[:200]}", file=sys.stderr)
 
+    if args.save:
+        from bashful.artifacts import save_run_artifact
+        artifact_id = save_run_artifact(result, prompt)
+        print(f"  Saved artifact: {artifact_id}", file=sys.stderr)
+
     if not result.ok:
         sys.exit(result.exit_code if result.exit_code > 0 else 1)
 
@@ -121,7 +126,7 @@ def cmd_run(args: argparse.Namespace) -> None:
 # ---------------------------------------------------------------------------
 
 def cmd_fanout(args: argparse.Namespace) -> None:
-    """Run the same prompt across multiple agents sequentially."""
+    """Run the same prompt across multiple agents."""
     from bashful.fanout import fanout
 
     agent_ids = [a.strip() for a in args.agents.split(",") if a.strip()]
@@ -140,6 +145,7 @@ def cmd_fanout(args: argparse.Namespace) -> None:
         timeout=args.timeout,
         output_format=args.output_format,
         mode=args.mode,
+        parallel=args.parallel,
     )
 
     # Print results with clear separation
@@ -166,8 +172,65 @@ def cmd_fanout(args: argparse.Namespace) -> None:
             if not result.ok and result.stderr.strip():
                 print(f"  stderr: {result.stderr.strip()[:200]}", file=sys.stderr)
 
+    if args.save:
+        from bashful.artifacts import save_fanout_artifact
+        artifact_id = save_fanout_artifact(results, prompt, mode=args.mode)
+        print(f"\n  Saved artifact: {artifact_id}", file=sys.stderr)
+
     if any_failed:
         sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# Artifact commands
+# ---------------------------------------------------------------------------
+
+def cmd_artifacts(args: argparse.Namespace) -> None:
+    """List or show saved artifacts."""
+    positionals = args.artifact_args or []
+    if not positionals:
+        _list_artifacts()
+    elif positionals[0] == "show":
+        if len(positionals) != 2:
+            print("Usage: bashful artifacts show <artifact_id>", file=sys.stderr)
+            sys.exit(1)
+        _show_artifact(positionals[1])
+    elif len(positionals) == 1:
+        _show_artifact(positionals[0])
+    else:
+        print("Usage: bashful artifacts [show] <artifact_id>", file=sys.stderr)
+        sys.exit(1)
+
+
+def _list_artifacts() -> None:
+    from bashful.artifacts import list_artifacts
+    import datetime
+
+    arts = list_artifacts()
+    if not arts:
+        print("  No saved artifacts.")
+        return
+
+    for a in arts:
+        ts = datetime.datetime.fromtimestamp(a["timestamp"]).strftime("%Y-%m-%d %H:%M:%S")
+        if a["type"] == "run":
+            ok = "OK" if a["exit_code"] == 0 and not a["timed_out"] else "FAIL"
+            print(f"  {a['id']:<40} {a['type']:<8} {a['agent']:<10} [{ok}]  {ts}")
+        else:
+            ok = "OK" if a.get("all_ok") else "FAIL"
+            agents = ",".join(a.get("agents", []))
+            print(f"  {a['id']:<40} {a['type']:<8} {agents:<10} [{ok}]  {ts}")
+
+
+def _show_artifact(artifact_id: str) -> None:
+    import json
+    from bashful.artifacts import show_artifact
+
+    data = show_artifact(artifact_id)
+    if data is None:
+        print(f"  Artifact not found: {artifact_id}", file=sys.stderr)
+        sys.exit(1)
+    print(json.dumps(data, indent=2))
 
 
 # ---------------------------------------------------------------------------
@@ -451,6 +514,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("-m", "--mode", default=DEFAULT_MODE, choices=VALID_MODES,
                        help=f"Execution mode (default: {DEFAULT_MODE})")
     run_p.add_argument("-v", "--verbose", action="store_true", help="Print run metadata to stderr")
+    run_p.add_argument("--save", action="store_true", help="Save result as an artifact")
 
     # Fanout
     fanout_p = sub.add_parser("fanout", help="Run the same prompt across multiple agents")
@@ -460,6 +524,13 @@ def build_parser() -> argparse.ArgumentParser:
     fanout_p.add_argument("-o", "--output-format", help="Output format")
     fanout_p.add_argument("-m", "--mode", default=DEFAULT_MODE, choices=VALID_MODES,
                           help=f"Execution mode (default: {DEFAULT_MODE})")
+    fanout_p.add_argument("--parallel", action="store_true",
+                          help="Run agents concurrently (default: sequential)")
+    fanout_p.add_argument("--save", action="store_true", help="Save result as an artifact")
+
+    # Artifacts
+    art_p = sub.add_parser("artifacts", help="List or show saved artifacts")
+    art_p.add_argument("artifact_args", nargs="*", help="[show] <artifact_id>")
 
     # Health
     ping_p = sub.add_parser("ping", help="Check agent health")
@@ -524,6 +595,7 @@ def main(argv: list[str] | None = None) -> None:
         "show": cmd_show,
         "run": cmd_run,
         "fanout": cmd_fanout,
+        "artifacts": cmd_artifacts,
         "ping": cmd_ping,
         "versions": cmd_version,
         "launch": cmd_launch,

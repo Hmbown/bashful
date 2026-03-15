@@ -106,3 +106,71 @@ class TestFanout:
     def test_empty_agent_list(self):
         results = fanout([], "hello")
         assert results == []
+
+    def test_parallel_returns_same_results(self):
+        with (
+            patch("bashful.fanout.run_agent", side_effect=_mock_run_agent),
+            patch("bashful.runner.shutil.which", return_value="/usr/bin/fake"),
+        ):
+            results = fanout(["claude", "codex"], "hello", parallel=True)
+
+        assert len(results) == 2
+        assert results[0][0] == "claude"
+        assert results[1][0] == "codex"
+        assert results[0][1].ok
+        assert results[1][1].ok
+
+    def test_parallel_preserves_order(self):
+        with (
+            patch("bashful.fanout.run_agent", side_effect=_mock_run_agent),
+            patch("bashful.runner.shutil.which", return_value="/usr/bin/fake"),
+        ):
+            ids = ["claude", "codex", "gemini"]
+            results = fanout(ids, "hello", parallel=True)
+
+        assert [r[0] for r in results] == ids
+
+    def test_parallel_handles_errors(self):
+        def fail_run(agent, prompt, **kwargs):
+            if agent.id == "codex":
+                raise ValueError("not installed")
+            return _mock_run_agent(agent, prompt, **kwargs)
+
+        with (
+            patch("bashful.fanout.run_agent", side_effect=fail_run),
+            patch("bashful.runner.shutil.which", return_value="/usr/bin/fake"),
+        ):
+            results = fanout(["claude", "codex"], "hello", parallel=True)
+
+        assert results[0][1].ok
+        assert isinstance(results[1][1], FanoutError)
+
+    def test_parallel_single_agent_uses_sequential(self):
+        """With only one agent, parallel=True should still work."""
+        with (
+            patch("bashful.fanout.run_agent", side_effect=_mock_run_agent),
+            patch("bashful.runner.shutil.which", return_value="/usr/bin/fake"),
+        ):
+            results = fanout(["claude"], "hello", parallel=True)
+
+        assert len(results) == 1
+        assert results[0][1].ok
+
+    def test_parallel_duplicate_agents(self):
+        """Duplicate agent ids should each get their own result."""
+        with (
+            patch("bashful.fanout.run_agent", side_effect=_mock_run_agent),
+            patch("bashful.runner.shutil.which", return_value="/usr/bin/fake"),
+        ):
+            results = fanout(["claude", "claude"], "hello", parallel=True)
+
+        assert len(results) == 2
+        assert results[0][0] == "claude"
+        assert results[1][0] == "claude"
+        assert results[0][1].ok
+        assert results[1][1].ok
+
+    def test_parallel_caps_workers(self):
+        """Worker count should be capped at MAX_PARALLEL_WORKERS."""
+        from bashful.fanout import MAX_PARALLEL_WORKERS
+        assert MAX_PARALLEL_WORKERS <= 8  # sanity: modest cap

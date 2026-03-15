@@ -96,6 +96,7 @@ def get_skill_metadata() -> dict:
             "list", "doctor", "show", "run", "fanout", "ping", "versions",
             "launch", "jobs", "logs", "kill",
             "worktree create", "worktree list", "worktree remove",
+            "artifacts", "artifacts show",
             "skill",
         ],
     }
@@ -147,7 +148,8 @@ clear error.  Use `bashful show <agent>` to check which modes an agent supports.
 | `bashful versions [agent]` | Print version info for installed agents |
 | `bashful ping [agent] [--live]` | Health check (version + optional API ping) |
 | `bashful run <agent> "prompt" [-m mode]` | Run an agent with a prompt (headless, blocking) |
-| `bashful fanout agent1,agent2 "prompt"` | Run the same prompt across multiple agents |
+| `bashful fanout agent1,agent2 "prompt"` | Run the same prompt across multiple agents (sequential) |
+| `bashful fanout agent1,agent2 "prompt" --parallel` | Run fanout concurrently |
 | `bashful launch <agent> "prompt" [-m mode]` | Launch a background job |
 | `bashful jobs` | List all jobs and their status |
 | `bashful logs <job_id>` | Read stdout/stderr from a job |
@@ -155,6 +157,10 @@ clear error.  Use `bashful show <agent>` to check which modes an agent supports.
 | `bashful worktree create <name>` | Create an isolated git worktree |
 | `bashful worktree list` | List active worktrees |
 | `bashful worktree remove <name>` | Remove a worktree |
+| `bashful run <agent> "prompt" --save` | Run and save an artifact |
+| `bashful fanout agents "prompt" --save` | Fanout and save an artifact |
+| `bashful artifacts` | List saved artifacts |
+| `bashful artifacts <id>` | Show a saved artifact (JSON) |
 | `bashful skill [--live]` | Print this skill document |
 
 ## Supported Agents
@@ -190,14 +196,36 @@ bashful run codex "Add unit tests for auth.py" -m write
 ### 4. Multi-agent fanout
 
 ```bash
-# Ask the same question to multiple agents
+# Sequential (default) — predictable, one at a time
 bashful fanout claude,codex,gemini "What's the best way to handle errors in Go?"
+
+# Parallel — all agents run concurrently
+bashful fanout claude,codex,gemini "What's the best way to handle errors in Go?" --parallel
 
 # Fanout with write mode
 bashful fanout claude,codex "Add a docstring to main()" -m write
 ```
 
-### 5. Launch background work
+### 5. Save and inspect artifacts
+
+```bash
+# Save a run result
+bashful run claude "Explain this function" --save
+
+# Save a fanout result
+bashful fanout claude,codex "Review this code" --save
+
+# List recent artifacts
+bashful artifacts
+
+# Show a specific artifact (JSON)
+bashful artifacts run-claude-1710000000
+```
+
+Artifacts are stored as JSON in `~/.bashful/artifacts/` and can be read by
+other tools (e.g. Hermes) for post-hoc analysis.
+
+### 6. Launch background work
 
 ```bash
 # Start a job
@@ -216,7 +244,7 @@ bashful logs <job_id>
 bashful kill <job_id>
 ```
 
-### 6. Parallel work with worktree isolation
+### 7. Parallel work with worktree isolation
 
 ```bash
 # Create isolated worktrees
@@ -239,13 +267,17 @@ bashful worktree remove add-tests
 ## Tips
 
 - Use `bashful run` for quick, synchronous queries.
-- Use `bashful fanout` to compare answers from multiple agents.
+- Use `bashful fanout` to compare answers from multiple agents (`--parallel` for speed).
+- Use `--save` with `run` or `fanout` to persist results as artifacts.
 - Use `bashful launch` for work that takes more than a few seconds.
 - Use `--isolate` with `launch` to prevent agents from conflicting.
 - Use `-m write` only when you need the agent to modify files.
 - Use `bashful ping --live` to verify API connectivity before launching work.
 - Logs persist in `~/.bashful/jobs/` — check old results anytime.
 - Worktrees live as siblings of your repo in `.bashful-worktrees/`.
+- **Privacy:** Saved artifacts (`--save`) store the full prompt and agent output
+  as plaintext JSON. These may contain sensitive instructions or model responses.
+  Treat `~/.bashful/artifacts/` with the same care as shell history.
 
 {live_state}
 """

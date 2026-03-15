@@ -108,3 +108,74 @@ def test_launch_accepts_mode_flag():
     parser = build_parser()
     args = parser.parse_args(["launch", "claude", "hello", "-m", "write"])
     assert args.mode == "write"
+
+
+def test_run_save_flag():
+    from bashful.cli import build_parser
+    parser = build_parser()
+    args = parser.parse_args(["run", "claude", "hello", "--save"])
+    assert args.save is True
+
+
+def test_run_save_default_off():
+    from bashful.cli import build_parser
+    parser = build_parser()
+    args = parser.parse_args(["run", "claude", "hello"])
+    assert args.save is False
+
+
+def test_fanout_parallel_flag():
+    from bashful.cli import build_parser
+    parser = build_parser()
+    args = parser.parse_args(["fanout", "claude,codex", "hello", "--parallel"])
+    assert args.parallel is True
+
+
+def test_fanout_parallel_default_off():
+    from bashful.cli import build_parser
+    parser = build_parser()
+    args = parser.parse_args(["fanout", "claude,codex", "hello"])
+    assert args.parallel is False
+
+
+def test_fanout_save_flag():
+    from bashful.cli import build_parser
+    parser = build_parser()
+    args = parser.parse_args(["fanout", "claude,codex", "hello", "--save"])
+    assert args.save is True
+
+
+def test_artifacts_parser_no_id():
+    from bashful.cli import build_parser
+    parser = build_parser()
+    args = parser.parse_args(["artifacts"])
+    assert args.artifact_args == []
+
+
+def test_artifacts_parser_with_id():
+    from bashful.cli import build_parser
+    parser = build_parser()
+    args = parser.parse_args(["artifacts", "run-claude-123"])
+    assert args.artifact_args == ["run-claude-123"]
+
+
+def test_artifacts_parser_show_subcommand():
+    from bashful.cli import build_parser
+    parser = build_parser()
+    args = parser.parse_args(["artifacts", "show", "run-claude-123"])
+    assert args.artifact_args == ["show", "run-claude-123"]
+
+
+def test_artifacts_list_empty(capsys, tmp_path, monkeypatch):
+    monkeypatch.setattr("bashful.artifacts.ARTIFACTS_DIR", tmp_path / "empty")
+    main(["artifacts"])
+    out = capsys.readouterr().out
+    assert "No saved artifacts" in out
+
+
+def test_artifacts_show_not_found(capsys, tmp_path, monkeypatch):
+    monkeypatch.setattr("bashful.artifacts.ARTIFACTS_DIR", tmp_path / "empty")
+    with pytest.raises(SystemExit):
+        main(["artifacts", "nonexistent"])
+    err = capsys.readouterr().err
+    assert "not found" in err

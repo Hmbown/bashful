@@ -39,11 +39,30 @@ bashful run codex "Add tests for utils.py" -m write
 ### Multi-agent fanout
 
 ```bash
-# Run the same prompt across multiple agents
+# Sequential (default)
 bashful fanout claude,codex,gemini "What's the best way to handle errors in Go?"
+
+# Parallel — all agents run concurrently
+bashful fanout claude,codex,gemini "What's the best way to handle errors in Go?" --parallel
 
 # With timeout and mode
 bashful fanout claude,codex "Add a docstring to main()" -m write -t 120
+```
+
+### Artifacts
+
+```bash
+# Save a run result
+bashful run claude "Explain this function" --save
+
+# Save a fanout result
+bashful fanout claude,codex "Review this code" --save
+
+# List recent artifacts
+bashful artifacts
+
+# Show a specific artifact (JSON)
+bashful artifacts run-claude-1710000000
 ```
 
 ### Health checks
@@ -121,7 +140,8 @@ Not all agents support `write` mode. Use `bashful show <agent>` to check.
 - **Agent catalog** (`bashful/data/agents.json`) — machine-readable inventory with headless invocation profiles and per-agent execution modes
 - **Discovery** (`bashful/discovery.py`) — detects installed agents via `shutil.which`
 - **Runner** (`bashful/runner.py`) — runs agents as subprocesses with timeout/capture and mode support
-- **Fanout** (`bashful/fanout.py`) — sequential multi-agent fanout for running the same prompt across agents
+- **Fanout** (`bashful/fanout.py`) — multi-agent fanout (sequential or parallel) for running the same prompt across agents
+- **Artifacts** (`bashful/artifacts.py`) — lightweight JSON artifact persistence for run/fanout results
 - **Health** (`bashful/health.py`) — version + live ping checks
 - **Supervisor** (`bashful/supervisor.py`) — background job management with file-based state
 - **Worktree** (`bashful/worktree.py`) — git worktree isolation for parallel work
