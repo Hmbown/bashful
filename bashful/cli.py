@@ -182,6 +182,67 @@ def cmd_fanout(args: argparse.Namespace) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Compare command
+# ---------------------------------------------------------------------------
+
+def cmd_compare(args: argparse.Namespace) -> None:
+    """Run agents and optionally judge the results."""
+    from bashful.compare import compare
+
+    agent_ids = [a.strip() for a in args.agents.split(",") if a.strip()]
+    if not agent_ids:
+        print("No agents specified.", file=sys.stderr)
+        sys.exit(1)
+
+    prompt = " ".join(args.prompt)
+    if not prompt:
+        print("No prompt provided.", file=sys.stderr)
+        sys.exit(1)
+
+    data = compare(
+        agent_ids,
+        prompt,
+        timeout=args.timeout,
+        output_format=args.output_format,
+        mode=args.mode,
+        parallel=args.parallel,
+        judge=args.judge,
+        judge_timeout=args.judge_timeout,
+    )
+
+    from bashful.fanout import FanoutError
+
+    any_failed = False
+    for i, (agent_id, result) in enumerate(data["results"]):
+        if i > 0:
+            print()
+        if result.ok:
+            marker = "OK"
+        elif getattr(result, "timed_out", False):
+            marker = "TIMEOUT"
+            any_failed = True
+        else:
+            marker = f"FAIL(exit={result.exit_code})"
+            any_failed = True
+        print(f"--- {agent_id} [{marker}] ---")
+        if isinstance(result, FanoutError):
+            print(result.error)
+        elif result.stdout.strip():
+            print(result.stdout.strip())
+
+    if data["judge"]:
+        j = data["judge"]
+        print(f"\n=== judge: {j['agent']} ===")
+        if j["ok"]:
+            print(j.get("stdout", ""))
+        else:
+            print(f"[judge error: {j.get('error', 'unknown')}]")
+
+    if any_failed:
+        sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
 # Artifact commands
 # ---------------------------------------------------------------------------
 
@@ -410,6 +471,45 @@ def cmd_kill(args: argparse.Namespace) -> None:
         print(f"  Job {args.job_id} is not running")
 
 
+def cmd_wait(args: argparse.Namespace) -> None:
+    """Block until a job finishes, then print status."""
+    from bashful.supervisor import wait_for_job
+
+    try:
+        status = wait_for_job(args.job_id, interval=args.interval)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    exit_str = f"exit={status.exit_code}" if status.exit_code is not None else ""
+    dur_str = f"{status.duration_s}s" if status.duration_s is not None else ""
+    print(f"  {status.job_id}  {status.agent_id}  {status.state}  {dur_str}  {exit_str}")
+
+    if status.state == "failed":
+        sys.exit(1)
+
+
+def cmd_watch(args: argparse.Namespace) -> None:
+    """Stream job output until completion."""
+    from bashful.supervisor import watch_job
+
+    stream = "stderr" if args.stderr else "stdout"
+    try:
+        status = watch_job(
+            args.job_id,
+            interval=args.interval,
+            stream=stream,
+        )
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"\n--- job {status.job_id} {status.state} ---", file=sys.stderr)
+
+    if status.state == "failed":
+        sys.exit(1)
+
+
 # ---------------------------------------------------------------------------
 # Worktree commands
 # ---------------------------------------------------------------------------
@@ -528,6 +628,19 @@ def build_parser() -> argparse.ArgumentParser:
                           help="Run agents concurrently (default: sequential)")
     fanout_p.add_argument("--save", action="store_true", help="Save result as an artifact")
 
+    # Compare
+    cmp_p = sub.add_parser("compare", help="Compare responses from multiple agents")
+    cmp_p.add_argument("agents", help="Comma-separated agent ids (e.g. claude,codex)")
+    cmp_p.add_argument("prompt", nargs="+", help="The prompt to send")
+    cmp_p.add_argument("-t", "--timeout", type=float, default=60.0, help="Timeout per agent")
+    cmp_p.add_argument("-o", "--output-format", help="Output format")
+    cmp_p.add_argument("-m", "--mode", default=DEFAULT_MODE, choices=VALID_MODES,
+                        help=f"Execution mode (default: {DEFAULT_MODE})")
+    cmp_p.add_argument("--parallel", action="store_true", help="Run agents concurrently")
+    cmp_p.add_argument("--judge", metavar="AGENT", help="Agent to judge/compare results")
+    cmp_p.add_argument("--judge-timeout", type=float, default=120.0,
+                        help="Timeout for judge agent (default: 120s)")
+
     # Artifacts
     art_p = sub.add_parser("artifacts", help="List or show saved artifacts")
     art_p.add_argument("artifact_args", nargs="*", help="[show] <artifact_id>")
@@ -563,6 +676,17 @@ def build_parser() -> argparse.ArgumentParser:
     kill_p = sub.add_parser("kill", help="Kill a running job")
     kill_p.add_argument("job_id", help="Job ID")
 
+    wait_p = sub.add_parser("wait", help="Block until a job finishes")
+    wait_p.add_argument("job_id", help="Job ID")
+    wait_p.add_argument("--interval", type=float, default=1.0,
+                         help="Poll interval in seconds (default: 1)")
+
+    watch_p = sub.add_parser("watch", help="Stream job output until completion")
+    watch_p.add_argument("job_id", help="Job ID")
+    watch_p.add_argument("--stderr", action="store_true", help="Watch stderr instead")
+    watch_p.add_argument("--interval", type=float, default=2.0,
+                          help="Poll interval in seconds (default: 2)")
+
     # Worktree
     wt_p = sub.add_parser("worktree", help="Manage git worktrees for isolation")
     wt_sub = wt_p.add_subparsers(dest="wt_command")
@@ -595,6 +719,7 @@ def main(argv: list[str] | None = None) -> None:
         "show": cmd_show,
         "run": cmd_run,
         "fanout": cmd_fanout,
+        "compare": cmd_compare,
         "artifacts": cmd_artifacts,
         "ping": cmd_ping,
         "versions": cmd_version,
@@ -602,6 +727,8 @@ def main(argv: list[str] | None = None) -> None:
         "jobs": cmd_jobs,
         "logs": cmd_logs,
         "kill": cmd_kill,
+        "wait": cmd_wait,
+        "watch": cmd_watch,
         "worktree": cmd_worktree,
         "skill": cmd_skill,
     }

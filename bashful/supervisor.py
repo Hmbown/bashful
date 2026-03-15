@@ -316,6 +316,59 @@ def kill_job(job_id: str, *, jobs_dir: Path | None = None) -> bool:
     return False
 
 
+def wait_for_job(
+    job_id: str,
+    *,
+    interval: float = 1.0,
+    jobs_dir: Path | None = None,
+) -> JobStatus:
+    """Block until a job finishes, then return its final status.
+
+    Polls at *interval* seconds.  No daemon — just a sleep loop.
+    """
+    while True:
+        status = poll(job_id, jobs_dir=jobs_dir)
+        if status.state not in ("running", "unknown"):
+            return status
+        time.sleep(interval)
+
+
+def watch_job(
+    job_id: str,
+    *,
+    interval: float = 2.0,
+    stream: str = "stdout",
+    jobs_dir: Path | None = None,
+) -> JobStatus:
+    """Poll a job and print new output until it finishes.
+
+    Yields lines to stdout as they appear.  Returns the final status.
+    """
+    base = jobs_dir or JOBS_DIR
+    log_file = base / job_id / f"{stream}.log"
+    seen = 0
+
+    while True:
+        status = poll(job_id, jobs_dir=jobs_dir)
+
+        # Print any new output
+        if log_file.exists():
+            content = log_file.read_text()
+            if len(content) > seen:
+                print(content[seen:], end="", flush=True)
+                seen = len(content)
+
+        if status.state not in ("running", "unknown"):
+            # Final flush
+            if log_file.exists():
+                content = log_file.read_text()
+                if len(content) > seen:
+                    print(content[seen:], end="", flush=True)
+            return status
+
+        time.sleep(interval)
+
+
 def read_logs(
     job_id: str,
     *,

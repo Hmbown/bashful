@@ -166,6 +166,41 @@ def test_artifacts_parser_show_subcommand():
     assert args.artifact_args == ["show", "run-claude-123"]
 
 
+def test_compare_parser():
+    from bashful.cli import build_parser
+    parser = build_parser()
+    args = parser.parse_args(["compare", "claude,codex", "hello", "--judge", "gemini"])
+    assert args.agents == "claude,codex"
+    assert args.prompt == ["hello"]
+    assert args.judge == "gemini"
+
+
+def test_compare_parser_defaults():
+    from bashful.cli import build_parser
+    parser = build_parser()
+    args = parser.parse_args(["compare", "claude,codex", "hello"])
+    assert args.judge is None
+    assert args.parallel is False
+    assert args.judge_timeout == 120.0
+
+
+def test_wait_parser():
+    from bashful.cli import build_parser
+    parser = build_parser()
+    args = parser.parse_args(["wait", "abc123", "--interval", "0.5"])
+    assert args.job_id == "abc123"
+    assert args.interval == 0.5
+
+
+def test_watch_parser():
+    from bashful.cli import build_parser
+    parser = build_parser()
+    args = parser.parse_args(["watch", "abc123", "--stderr", "--interval", "3.0"])
+    assert args.job_id == "abc123"
+    assert args.stderr is True
+    assert args.interval == 3.0
+
+
 def test_artifacts_list_empty(capsys, tmp_path, monkeypatch):
     monkeypatch.setattr("bashful.artifacts.ARTIFACTS_DIR", tmp_path / "empty")
     main(["artifacts"])

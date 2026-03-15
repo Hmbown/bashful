@@ -57,6 +57,16 @@ class TestGenerateSkillDoc:
         doc = generate_skill_doc()
         assert "Save and inspect artifacts" in doc or "artifact" in doc.lower()
 
+    def test_contains_compare_section(self):
+        doc = generate_skill_doc()
+        assert "bashful compare" in doc
+        assert "--judge" in doc
+
+    def test_contains_wait_watch(self):
+        doc = generate_skill_doc()
+        assert "bashful wait" in doc
+        assert "bashful watch" in doc
+
     def test_contains_bashful_vs_acz(self):
         doc = generate_skill_doc()
         assert "ACZ" in doc
@@ -111,5 +121,8 @@ class TestGetSkillMetadata:
         assert "worktree create" in meta["commands"]
         assert "skill" in meta["commands"]
         assert "fanout" in meta["commands"]
+        assert "compare" in meta["commands"]
+        assert "wait" in meta["commands"]
+        assert "watch" in meta["commands"]
         assert "artifacts" in meta["commands"]
         assert "artifacts show" in meta["commands"]

@@ -4,7 +4,7 @@ Bash-native agent CLI discovery and orchestration toolkit.
 
 Bashful is the process-centric substrate for managing agent CLIs on a developer machine. It discovers, catalogs, and provides a unified interface to agent tools like **Claude**, **Codex**, **Copilot**, **Gemini**, **Qwen**, and **OpenCode** — without replacing any of them.
 
-> **How is this different from ACZ?** ACZ is a protocol-level bridge that connects running agents via MCP. Bashful operates one layer below: it manages the agent *binaries* themselves — detecting what's installed, launching processes, and supervising sessions. The two are complementary.
+> **How is this different from Superpowers / subagent-driven-development?** Superpowers-style workflows are prompt-level methodologies for how an agent should break work down. Bashful operates at the process layer: it manages the actual agent *binaries* on your machine — detecting what's installed, launching processes, supervising jobs, and capturing artifacts.
 
 ## Install
 
@@ -49,6 +49,19 @@ bashful fanout claude,codex,gemini "What's the best way to handle errors in Go?"
 bashful fanout claude,codex "Add a docstring to main()" -m write -t 120
 ```
 
+### Compare with optional judge
+
+```bash
+# Compare responses side-by-side
+bashful compare claude,codex "Explain this error"
+
+# Add a judge agent to synthesize the comparison
+bashful compare claude,codex,gemini "Best approach?" --judge claude
+
+# Parallel comparison
+bashful compare claude,codex "Review this code" --parallel
+```
+
 ### Artifacts
 
 ```bash
@@ -83,6 +96,8 @@ bashful jobs --running      # Only running jobs
 bashful logs <job_id>       # Read stdout
 bashful logs <job_id> --stderr --tail 20
 bashful kill <job_id>       # Kill a running job
+bashful wait <job_id>       # Block until done, print status
+bashful watch <job_id>      # Stream output until done
 ```
 
 ### Worktree isolation
@@ -141,6 +156,8 @@ Not all agents support `write` mode. Use `bashful show <agent>` to check.
 - **Discovery** (`bashful/discovery.py`) — detects installed agents via `shutil.which`
 - **Runner** (`bashful/runner.py`) — runs agents as subprocesses with timeout/capture and mode support
 - **Fanout** (`bashful/fanout.py`) — multi-agent fanout (sequential or parallel) for running the same prompt across agents
+- **Compare** (`bashful/compare.py`) — compare mode with optional judge agent
+- **Normalize** (`bashful/normalize.py`) — lightweight result normalization helpers
 - **Artifacts** (`bashful/artifacts.py`) — lightweight JSON artifact persistence for run/fanout results
 - **Health** (`bashful/health.py`) — version + live ping checks
 - **Supervisor** (`bashful/supervisor.py`) — background job management with file-based state

@@ -16,6 +16,8 @@ from bashful.supervisor import (
     list_jobs,
     poll,
     read_logs,
+    wait_for_job,
+    watch_job,
 )
 
 
@@ -357,3 +359,63 @@ class TestReadLogs:
     def test_not_found(self, tmp_path):
         with pytest.raises(ValueError, match="No stdout log"):
             read_logs("nope", jobs_dir=tmp_path)
+
+
+class TestWaitForJob:
+    def test_wait_already_done(self, tmp_path):
+        """wait_for_job returns immediately for a finished job."""
+        job_dir = tmp_path / "done"
+        job_dir.mkdir()
+        (job_dir / "meta.json").write_text(json.dumps({
+            "job_id": "done", "agent_id": "test", "prompt": "t",
+            "pid": 1, "command": [], "cwd": "/", "started_at": 100.0,
+        }))
+        (job_dir / "status.json").write_text(json.dumps({
+            "state": "completed", "exit_code": 0, "ended_at": 110.0,
+        }))
+
+        status = wait_for_job("done", interval=0.01, jobs_dir=tmp_path)
+        assert status.state == "completed"
+        assert status.exit_code == 0
+
+    def test_wait_transitions_to_done(self, tmp_path):
+        """wait_for_job polls until the job finishes."""
+        agent = _agent()
+        mock_proc = MagicMock()
+        mock_proc.pid = 10
+        # First poll: still running.  Second poll: done.
+        mock_proc.poll.side_effect = [None, 0]
+
+        with (
+            patch("bashful.supervisor.shutil.which", return_value="/usr/bin/test-agent"),
+            patch("bashful.supervisor.subprocess.Popen", return_value=mock_proc),
+        ):
+            job = launch(agent, "wait-test", jobs_dir=tmp_path)
+
+        status = wait_for_job(job.job_id, interval=0.01, jobs_dir=tmp_path)
+        assert status.state == "completed"
+
+    def test_wait_not_found(self, tmp_path):
+        with pytest.raises(ValueError, match="not found"):
+            wait_for_job("nope", jobs_dir=tmp_path)
+
+
+class TestWatchJob:
+    def test_watch_completed(self, tmp_path, capsys):
+        """watch_job streams output then returns status."""
+        job_dir = tmp_path / "wjob"
+        job_dir.mkdir()
+        (job_dir / "meta.json").write_text(json.dumps({
+            "job_id": "wjob", "agent_id": "test", "prompt": "t",
+            "pid": 1, "command": [], "cwd": "/", "started_at": 100.0,
+        }))
+        (job_dir / "status.json").write_text(json.dumps({
+            "state": "completed", "exit_code": 0, "ended_at": 110.0,
+        }))
+        (job_dir / "stdout.log").write_text("line one\nline two\n")
+
+        status = watch_job("wjob", interval=0.01, jobs_dir=tmp_path)
+        assert status.state == "completed"
+        captured = capsys.readouterr().out
+        assert "line one" in captured
+        assert "line two" in captured
