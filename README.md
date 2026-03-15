@@ -18,160 +18,99 @@ pip install -e .
 
 ```bash
 bashful list                # List all agents and install status
+bashful list --json         # Machine-readable output
 bashful doctor              # Readiness report
-bashful show claude         # Details for a specific agent (includes modes)
+bashful doctor --json       # JSON readiness report
+bashful show claude         # Details for a specific agent
 bashful versions            # Version info for all installed agents
+bashful ping [agent] --live # Health check with optional API ping
 ```
 
-### Running agents
+### Run
 
 ```bash
-# One-shot headless prompt (blocking, default read mode)
 bashful run gemini "What is the capital of France?"
-bashful run codex "Fix the type error in main.py" -v
-bashful run claude "Explain this function" -t 30 -o json
-
-# Explicit write mode (agent must support it)
-bashful run claude "Fix the bug in auth.py" -m write
-bashful run codex "Add tests for utils.py" -m write
+bashful run claude "Explain this function" -t 30 -v
+bashful run claude "Fix the bug in auth.py" -m write   # explicit write mode
+bashful run codex "Add tests for utils.py" --save      # save as artifact
 ```
 
-### Multi-agent fanout
-
-```bash
-# Sequential (default)
-bashful fanout claude,codex,gemini "What's the best way to handle errors in Go?"
-
-# Parallel — all agents run concurrently
-bashful fanout claude,codex,gemini "What's the best way to handle errors in Go?" --parallel
-
-# With timeout and mode
-bashful fanout claude,codex "Add a docstring to main()" -m write -t 120
-```
-
-### Compare with optional judge
+### Compare / Review / Dialectic
 
 ```bash
 # Compare responses side-by-side
 bashful compare claude,codex "Explain this error"
+bashful compare claude,codex "Best approach?" --judge claude --save
 
-# Add a judge agent to synthesize the comparison
-bashful compare claude,codex,gemini "Best approach?" --judge claude
+# Structured review with optional synthesis
+bashful review claude,codex "Review this plan." --judge claude --save
 
-# Parallel comparison
-bashful compare claude,codex "Review this code" --parallel
+# Thesis / antithesis / synthesis
+bashful dialectic claude,codex "Should we use a monorepo?" --judge claude --save
 ```
 
-### Structured review
+All three accept `--parallel`, `--judge AGENT`, and `--save`.
+
+### Multi-agent fanout
 
 ```bash
-# Get critique from multiple agents
-bashful review claude,codex "Review this plan for risks."
-
-# Synthesize reviews with a judge
-bashful review claude,codex "Review this plan for risks." --judge claude
-
-# Parallel reviews
-bashful review claude,codex,gemini "Audit this code for security" --parallel
-
-# Save review as artifact
-bashful review claude,codex "Review this plan." --save
+bashful fanout claude,codex,gemini "How to handle errors in Go?"
+bashful fanout claude,codex,gemini "How to handle errors in Go?" --parallel
+bashful fanout claude,codex "Add a docstring to main()" -m write --save
 ```
 
-### Dialectic (thesis / antithesis / synthesis)
+### Matrix (prompt x agent sweep)
 
 ```bash
-# Two agents argue opposing sides
-bashful dialectic claude,codex "Should this tool prefer local-first routing?"
-
-# Add synthesis via a judge
-bashful dialectic claude,codex "Should we use a monorepo?" --judge claude
-
-# Save dialectic as artifact
-bashful dialectic claude,codex "Question?" --judge claude --save
-```
-
-### Matrix (prompt × agent sweep)
-
-```bash
-# Run multiple prompts across agents
 bashful matrix claude,codex --prompt "Summarize this" --prompt "Find risks"
-
-# Parallel + save
 bashful matrix claude,codex --prompt "p1" --prompt "p2" --parallel --save
 ```
 
-### Configuration
+### Background jobs
 
 ```bash
-# Show current config state and overrides
-bashful config
-
-# User overrides live in ~/.bashful/config.json, e.g.:
-# {"agents": {"gemini": {"modes": ["read", "write"]}}}
+bashful launch claude "Refactor the auth module"
+bashful launch claude "Fix the auth bug" -m write --isolate  # worktree isolation
+bashful jobs                # List all jobs
+bashful jobs --json         # JSON output
+bashful logs <job_id>       # Read stdout
+bashful kill <job_id>       # Kill a running job
+bashful wait <job_id>       # Block until done
+bashful watch <job_id>      # Stream output until done
 ```
 
 ### Artifacts
 
 ```bash
-# Save a run result
-bashful run claude "Explain this function" --save
-
-# Save a fanout result
-bashful fanout claude,codex "Review this code" --save
-
-# List recent artifacts
-bashful artifacts
-
-# Show a specific artifact (JSON)
-bashful artifacts run-claude-1710000000
+bashful artifacts           # List recent artifacts
+bashful artifacts --json    # JSON listing
+bashful artifacts <id>      # Show a specific artifact (JSON)
 ```
 
-### Health checks
-
-```bash
-bashful ping                # Quick check (install + version)
-bashful ping --live         # Live check (sends a test prompt)
-bashful ping gemini --live -v
-```
-
-### Background jobs (process supervision)
-
-```bash
-bashful launch claude "Refactor the auth module"
-bashful launch claude "Fix the auth bug" -m write  # write mode
-bashful jobs                # List all jobs
-bashful jobs --running      # Only running jobs
-bashful logs <job_id>       # Read stdout
-bashful logs <job_id> --stderr --tail 20
-bashful kill <job_id>       # Kill a running job
-bashful wait <job_id>       # Block until done, print status
-bashful watch <job_id>      # Stream output until done
-```
+Any command with `--save` (`run`, `fanout`, `compare`, `review`, `dialectic`, `matrix`) persists results to `~/.bashful/artifacts/`.
 
 ### Worktree isolation
 
 ```bash
 bashful worktree create fix-auth          # Create isolated worktree
-bashful worktree create add-tests --base main
 bashful worktree list                     # List active worktrees
 bashful worktree remove fix-auth          # Clean up
-
-# Launch with automatic worktree isolation
-bashful launch claude "Fix the auth bug" --isolate
 ```
+
+### Configuration
+
+```bash
+bashful config              # Show current config and overrides
+```
+
+User overrides live in `~/.bashful/config.json`.
 
 ### Skill document
 
 ```bash
-# Print the full skill document (for piping into other agents)
-bashful skill
-
-# Include live system state
-bashful skill --live
-
-# Machine-readable metadata
-bashful skill --json
+bashful skill               # Print skill doc (for piping into other agents)
+bashful skill --live        # Include live system state
+bashful skill --json        # Machine-readable metadata
 ```
 
 ## Execution modes
@@ -204,16 +143,16 @@ Not all agents support `write` mode. Use `bashful show <agent>` to check.
 - **Agent catalog** (`bashful/data/agents.json`) — machine-readable inventory with headless invocation profiles and per-agent execution modes
 - **Discovery** (`bashful/discovery.py`) — detects installed agents via `shutil.which`
 - **Runner** (`bashful/runner.py`) — runs agents as subprocesses with timeout/capture and mode support
-- **Fanout** (`bashful/fanout.py`) — multi-agent fanout (sequential or parallel) for running the same prompt across agents
+- **Fanout** (`bashful/fanout.py`) — multi-agent fanout (sequential or parallel)
 - **Compare** (`bashful/compare.py`) — compare mode with optional judge agent
 - **Review** (`bashful/review.py`) — structured critique via multi-agent review with optional synthesis
 - **Dialectic** (`bashful/dialectic.py`) — thesis/antithesis/synthesis workflow
-- **Config** (`bashful/config.py`) — user configuration overrides for agent capabilities
-- **Normalize** (`bashful/normalize.py`) — lightweight result normalization helpers
-- **Matrix** (`bashful/matrix.py`) — prompt × agent matrix sweep
+- **Matrix** (`bashful/matrix.py`) — prompt x agent matrix sweep
 - **Artifacts** (`bashful/artifacts.py`) — lightweight JSON artifact persistence
 - **Health** (`bashful/health.py`) — version + live ping checks
 - **Supervisor** (`bashful/supervisor.py`) — background job management with file-based state
 - **Worktree** (`bashful/worktree.py`) — git worktree isolation for parallel work
+- **Config** (`bashful/config.py`) — user configuration overrides for agent capabilities
+- **Normalize** (`bashful/normalize.py`) — lightweight result normalization helpers
 - **Skill** (`bashful/skill.py`) — generates a skill document teaching other agents how to use bashful
 - **CLI** (`bashful/cli.py`) — unified command interface

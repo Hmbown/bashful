@@ -18,6 +18,9 @@ JOBS_DIR = Path.home() / ".bashful" / "jobs"
 # In-session Popen handles (lost on process restart; PID-based fallback used then)
 _handles: dict[str, subprocess.Popen] = {}
 
+# Open file handles for stdout/stderr logs (closed when job reaches terminal state)
+_file_handles: dict[str, list] = {}
+
 
 @dataclass
 class Job:
@@ -74,6 +77,16 @@ def _write_status(job_dir: Path, state: str, exit_code: int | None) -> None:
     }))
 
 
+def _close_file_handles(job_id: str) -> None:
+    """Close and remove any open log file handles for a job."""
+    fhs = _file_handles.pop(job_id, [])
+    for fh in fhs:
+        try:
+            fh.close()
+        except Exception:
+            pass
+
+
 def _read_status(job_dir: Path) -> dict | None:
     status_path = job_dir / "status.json"
     if status_path.exists():
@@ -127,6 +140,7 @@ def launch(
 
     stdout_f = open(job_dir / "stdout.log", "w")
     stderr_f = open(job_dir / "stderr.log", "w")
+    _file_handles[job_id] = [stdout_f, stderr_f]
 
     proc = subprocess.Popen(
         cmd,
@@ -193,6 +207,7 @@ def poll(job_id: str, *, jobs_dir: Path | None = None) -> JobStatus:
             # Process finished
             state = "completed" if rc == 0 else "failed"
             _write_status(job_dir, state, rc)
+            _close_file_handles(job_id)
             del _handles[job_id]
             ended = time.time()
             return JobStatus(
@@ -307,6 +322,7 @@ def kill_job(job_id: str, *, jobs_dir: Path | None = None) -> bool:
         except subprocess.TimeoutExpired:
             handle.kill()
         _write_status(job_dir, "killed", handle.returncode)
+        _close_file_handles(job_id)
         del _handles[job_id]
         return True
 
@@ -321,13 +337,24 @@ def wait_for_job(
     *,
     interval: float = 1.0,
     jobs_dir: Path | None = None,
+    max_unknown_polls: int = 30,
 ) -> JobStatus:
     """Block until a job finishes, then return its final status.
 
     Polls at *interval* seconds.  No daemon — just a sleep loop.
     """
+    unknown_count = 0
     while True:
         status = poll(job_id, jobs_dir=jobs_dir)
+        if status.state == "unknown":
+            unknown_count += 1
+            if unknown_count >= max_unknown_polls:
+                base = jobs_dir or JOBS_DIR
+                _write_status(base / job_id, "lost", None)
+                status = poll(job_id, jobs_dir=jobs_dir)
+                return status
+        else:
+            unknown_count = 0
         if status.state not in ("running", "unknown"):
             return status
         time.sleep(interval)
@@ -339,6 +366,7 @@ def watch_job(
     interval: float = 2.0,
     stream: str = "stdout",
     jobs_dir: Path | None = None,
+    max_unknown_polls: int = 30,
 ) -> JobStatus:
     """Poll a job and print new output until it finishes.
 
@@ -347,9 +375,19 @@ def watch_job(
     base = jobs_dir or JOBS_DIR
     log_file = base / job_id / f"{stream}.log"
     seen = 0
+    unknown_count = 0
 
     while True:
         status = poll(job_id, jobs_dir=jobs_dir)
+
+        if status.state == "unknown":
+            unknown_count += 1
+            if unknown_count >= max_unknown_polls:
+                base = jobs_dir or JOBS_DIR
+                _write_status(base / job_id, "lost", None)
+                status = poll(job_id, jobs_dir=jobs_dir)
+        else:
+            unknown_count = 0
 
         # Print any new output
         if log_file.exists():

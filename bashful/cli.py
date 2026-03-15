@@ -15,20 +15,36 @@ from bashful.discovery import check_agent, discover
 # Discovery commands
 # ---------------------------------------------------------------------------
 
-def cmd_list(_args: argparse.Namespace) -> None:
+def cmd_list(args: argparse.Namespace) -> None:
     """Print all supported agents and their install status."""
     results = discover()
+    if getattr(args, "json", False):
+        import json
+        rows = [{"id": r.id, "name": r.name, "installed": r.installed, "path": r.path} for r in results]
+        print(json.dumps(rows, indent=2))
+        return
     for r in results:
         status = "installed" if r.installed else "not found"
         path_info = f"  ({r.path})" if r.path else ""
         print(f"  {r.id:<12} {r.name:<22} [{status}]{path_info}")
 
 
-def cmd_doctor(_args: argparse.Namespace) -> None:
+def cmd_doctor(args: argparse.Namespace) -> None:
     """Print a readiness summary."""
     results = discover()
     found = [r for r in results if r.installed]
     missing = [r for r in results if not r.installed]
+    if getattr(args, "json", False):
+        import json
+        data = {
+            "version": __version__,
+            "total": len(results),
+            "installed": len(found),
+            "ready": [{"id": r.id, "path": r.path} for r in found],
+            "missing": [r.id for r in missing],
+        }
+        print(json.dumps(data, indent=2))
+        return
     print(f"bashful v{__version__} — agent readiness report\n")
     print(f"  {len(found)}/{len(results)} agent CLIs detected\n")
     if found:
@@ -238,6 +254,11 @@ def cmd_compare(args: argparse.Namespace) -> None:
         else:
             print(f"[judge error: {j.get('error', 'unknown')}]")
 
+    if args.save:
+        from bashful.artifacts import save_compare_artifact
+        artifact_id = save_compare_artifact(data, mode=args.mode)
+        print(f"\n  Saved artifact: {artifact_id}", file=sys.stderr)
+
     if any_failed:
         sys.exit(1)
 
@@ -250,7 +271,10 @@ def cmd_artifacts(args: argparse.Namespace) -> None:
     """List or show saved artifacts."""
     positionals = args.artifact_args or []
     if not positionals:
-        _list_artifacts()
+        if getattr(args, "json", False):
+            _list_artifacts_json()
+        else:
+            _list_artifacts()
     elif positionals[0] == "show":
         if len(positionals) != 2:
             print("Usage: bashful artifacts show <artifact_id>", file=sys.stderr)
@@ -261,6 +285,24 @@ def cmd_artifacts(args: argparse.Namespace) -> None:
     else:
         print("Usage: bashful artifacts [show] <artifact_id>", file=sys.stderr)
         sys.exit(1)
+
+
+def _list_artifacts_json() -> None:
+    import json
+    from bashful.artifacts import list_artifacts
+
+    arts = list_artifacts()
+    summaries = []
+    for a in arts:
+        entry = {"id": a["id"], "type": a["type"], "timestamp": a["timestamp"]}
+        if a["type"] == "run":
+            entry["agent"] = a["agent"]
+            entry["ok"] = a["exit_code"] == 0 and not a["timed_out"]
+        else:
+            entry["agents"] = a.get("agents", [])
+            entry["ok"] = a.get("all_ok", False)
+        summaries.append(entry)
+    print(json.dumps(summaries, indent=2))
 
 
 def _list_artifacts() -> None:
@@ -422,6 +464,22 @@ def cmd_jobs(args: argparse.Namespace) -> None:
         state_filter = "completed"
 
     jobs = list_jobs(state_filter=state_filter)
+
+    if getattr(args, "json", False):
+        import json
+        rows = []
+        for j in jobs:
+            rows.append({
+                "job_id": j.job_id,
+                "agent_id": j.agent_id,
+                "state": j.state,
+                "exit_code": j.exit_code,
+                "duration_s": j.duration_s,
+                "worktree": j.worktree,
+            })
+        print(json.dumps(rows, indent=2))
+        return
+
     if not jobs:
         print("  No jobs found.")
         return
@@ -815,8 +873,11 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command")
 
     # Discovery
-    sub.add_parser("list", help="List supported agents and install status")
-    sub.add_parser("doctor", help="Print agent readiness summary")
+    list_p = sub.add_parser("list", help="List supported agents and install status")
+    list_p.add_argument("--json", action="store_true", help="Output as JSON")
+
+    doc_p = sub.add_parser("doctor", help="Print agent readiness summary")
+    doc_p.add_argument("--json", action="store_true", help="Output as JSON")
 
     show_p = sub.add_parser("show", help="Show details for a specific agent")
     show_p.add_argument("agent", help="Agent id (e.g. claude, codex)")
@@ -825,7 +886,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_p = sub.add_parser("run", help="Run an agent with a prompt (headless)")
     run_p.add_argument("agent", help="Agent id (e.g. claude, gemini)")
     run_p.add_argument("prompt", nargs="+", help="The prompt to send")
-    run_p.add_argument("-t", "--timeout", type=float, default=60.0, help="Timeout in seconds")
+    run_p.add_argument("-t", "--timeout", type=float, default=300.0, help="Timeout in seconds")
     run_p.add_argument("-o", "--output-format", help="Output format (text, json, stream-json)")
     run_p.add_argument("-m", "--mode", default=DEFAULT_MODE, choices=VALID_MODES,
                        help=f"Execution mode (default: {DEFAULT_MODE})")
@@ -836,7 +897,7 @@ def build_parser() -> argparse.ArgumentParser:
     fanout_p = sub.add_parser("fanout", help="Run the same prompt across multiple agents")
     fanout_p.add_argument("agents", help="Comma-separated agent ids (e.g. claude,codex,gemini)")
     fanout_p.add_argument("prompt", nargs="+", help="The prompt to send")
-    fanout_p.add_argument("-t", "--timeout", type=float, default=60.0, help="Timeout per agent")
+    fanout_p.add_argument("-t", "--timeout", type=float, default=300.0, help="Timeout per agent")
     fanout_p.add_argument("-o", "--output-format", help="Output format")
     fanout_p.add_argument("-m", "--mode", default=DEFAULT_MODE, choices=VALID_MODES,
                           help=f"Execution mode (default: {DEFAULT_MODE})")
@@ -848,7 +909,7 @@ def build_parser() -> argparse.ArgumentParser:
     cmp_p = sub.add_parser("compare", help="Compare responses from multiple agents")
     cmp_p.add_argument("agents", help="Comma-separated agent ids (e.g. claude,codex)")
     cmp_p.add_argument("prompt", nargs="+", help="The prompt to send")
-    cmp_p.add_argument("-t", "--timeout", type=float, default=60.0, help="Timeout per agent")
+    cmp_p.add_argument("-t", "--timeout", type=float, default=300.0, help="Timeout per agent")
     cmp_p.add_argument("-o", "--output-format", help="Output format")
     cmp_p.add_argument("-m", "--mode", default=DEFAULT_MODE, choices=VALID_MODES,
                         help=f"Execution mode (default: {DEFAULT_MODE})")
@@ -856,10 +917,12 @@ def build_parser() -> argparse.ArgumentParser:
     cmp_p.add_argument("--judge", metavar="AGENT", help="Agent to judge/compare results")
     cmp_p.add_argument("--judge-timeout", type=float, default=120.0,
                         help="Timeout for judge agent (default: 120s)")
+    cmp_p.add_argument("--save", action="store_true", help="Save result as an artifact")
 
     # Artifacts
     art_p = sub.add_parser("artifacts", help="List or show saved artifacts")
     art_p.add_argument("artifact_args", nargs="*", help="[show] <artifact_id>")
+    art_p.add_argument("--json", action="store_true", help="Output list as JSON")
 
     # Health
     ping_p = sub.add_parser("ping", help="Check agent health")
@@ -883,6 +946,7 @@ def build_parser() -> argparse.ArgumentParser:
     jobs_p = sub.add_parser("jobs", help="List background jobs")
     jobs_p.add_argument("--running", action="store_true", help="Show only running jobs")
     jobs_p.add_argument("--completed", action="store_true", help="Show only completed jobs")
+    jobs_p.add_argument("--json", action="store_true", help="Output as JSON")
 
     logs_p = sub.add_parser("logs", help="Read job output")
     logs_p.add_argument("job_id", help="Job ID")
@@ -924,7 +988,7 @@ def build_parser() -> argparse.ArgumentParser:
     rev_p = sub.add_parser("review", help="Structured review across multiple agents")
     rev_p.add_argument("agents", help="Comma-separated agent ids (e.g. claude,codex)")
     rev_p.add_argument("prompt", nargs="+", help="The target or prompt to review")
-    rev_p.add_argument("-t", "--timeout", type=float, default=60.0, help="Timeout per agent")
+    rev_p.add_argument("-t", "--timeout", type=float, default=300.0, help="Timeout per agent")
     rev_p.add_argument("-o", "--output-format", help="Output format")
     rev_p.add_argument("-m", "--mode", default=DEFAULT_MODE, choices=VALID_MODES,
                         help=f"Execution mode (default: {DEFAULT_MODE})")
@@ -938,7 +1002,7 @@ def build_parser() -> argparse.ArgumentParser:
     dia_p = sub.add_parser("dialectic", help="Thesis/antithesis/synthesis dialectic")
     dia_p.add_argument("agents", help="Exactly two comma-separated agent ids (e.g. claude,codex)")
     dia_p.add_argument("prompt", nargs="+", help="The question to explore")
-    dia_p.add_argument("-t", "--timeout", type=float, default=60.0, help="Timeout per agent")
+    dia_p.add_argument("-t", "--timeout", type=float, default=300.0, help="Timeout per agent")
     dia_p.add_argument("-o", "--output-format", help="Output format")
     dia_p.add_argument("-m", "--mode", default=DEFAULT_MODE, choices=VALID_MODES,
                         help=f"Execution mode (default: {DEFAULT_MODE})")
@@ -952,7 +1016,7 @@ def build_parser() -> argparse.ArgumentParser:
     mat_p.add_argument("agents", help="Comma-separated agent ids (e.g. claude,codex)")
     mat_p.add_argument("--prompt", action="append", required=True,
                         help="Prompt to run (repeat for multiple)")
-    mat_p.add_argument("-t", "--timeout", type=float, default=60.0, help="Timeout per agent")
+    mat_p.add_argument("-t", "--timeout", type=float, default=300.0, help="Timeout per agent")
     mat_p.add_argument("-o", "--output-format", help="Output format")
     mat_p.add_argument("-m", "--mode", default=DEFAULT_MODE, choices=VALID_MODES,
                         help=f"Execution mode (default: {DEFAULT_MODE})")

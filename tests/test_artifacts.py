@@ -9,6 +9,7 @@ import pytest
 from bashful.artifacts import (
     ARTIFACTS_DIR,
     list_artifacts,
+    save_compare_artifact,
     save_dialectic_artifact,
     save_fanout_artifact,
     save_matrix_artifact,
@@ -126,6 +127,38 @@ class TestSaveReviewArtifact:
             "judge": judge_data,
         }
         aid = save_review_artifact(data)
+        artifact = json.loads((tmp_artifacts_dir / f"{aid}.json").read_text())
+        assert artifact["judge"] == judge_data
+
+
+class TestSaveCompareArtifact:
+    def test_creates_file(self, tmp_artifacts_dir):
+        data = {
+            "prompt": "Compare this.",
+            "results": [
+                ("claude", _run_result(agent_id="claude")),
+                ("codex", _run_result(agent_id="codex")),
+            ],
+            "judge": None,
+        }
+        aid = save_compare_artifact(data)
+        assert aid.startswith("compare-")
+        path = tmp_artifacts_dir / f"{aid}.json"
+        assert path.exists()
+        artifact = json.loads(path.read_text())
+        assert artifact["type"] == "compare"
+        assert artifact["agents"] == ["claude", "codex"]
+        assert artifact["prompt"] == "Compare this."
+        assert artifact["all_ok"] is True
+
+    def test_with_judge(self, tmp_artifacts_dir):
+        judge_data = {"agent": "gemini", "ok": True, "stdout": "Claude wins."}
+        data = {
+            "prompt": "Compare.",
+            "results": [("claude", _run_result(agent_id="claude"))],
+            "judge": judge_data,
+        }
+        aid = save_compare_artifact(data)
         artifact = json.loads((tmp_artifacts_dir / f"{aid}.json").read_text())
         assert artifact["judge"] == judge_data
 

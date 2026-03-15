@@ -288,7 +288,7 @@ def test_matrix_parser_defaults():
     args = parser.parse_args(["matrix", "claude", "--prompt", "p1"])
     assert args.parallel is False
     assert args.save is False
-    assert args.timeout == 60.0
+    assert args.timeout == 300.0
 
 
 def test_review_save_flag():
@@ -303,6 +303,63 @@ def test_dialectic_save_flag():
     parser = build_parser()
     args = parser.parse_args(["dialectic", "claude,codex", "hello", "--save"])
     assert args.save is True
+
+
+def test_compare_save_flag():
+    from bashful.cli import build_parser
+    parser = build_parser()
+    args = parser.parse_args(["compare", "claude,codex", "hello", "--save"])
+    assert args.save is True
+
+
+def test_compare_save_default_off():
+    from bashful.cli import build_parser
+    parser = build_parser()
+    args = parser.parse_args(["compare", "claude,codex", "hello"])
+    assert args.save is False
+
+
+# ---------------------------------------------------------------------------
+# --json flags
+# ---------------------------------------------------------------------------
+
+def test_list_json(capsys):
+    with patch("bashful.discovery.shutil.which", return_value=None):
+        main(["list", "--json"])
+    import json
+    out = capsys.readouterr().out
+    data = json.loads(out)
+    assert isinstance(data, list)
+    assert all("id" in r and "installed" in r for r in data)
+
+
+def test_doctor_json(capsys):
+    with patch("bashful.discovery.shutil.which", return_value=None):
+        main(["doctor", "--json"])
+    import json
+    out = capsys.readouterr().out
+    data = json.loads(out)
+    assert "version" in data
+    assert "installed" in data
+    assert "missing" in data
+
+
+def test_jobs_json(capsys):
+    with patch("bashful.supervisor.list_jobs", return_value=[]):
+        main(["jobs", "--json"])
+    import json
+    out = capsys.readouterr().out
+    data = json.loads(out)
+    assert data == []
+
+
+def test_artifacts_json(capsys, tmp_path, monkeypatch):
+    monkeypatch.setattr("bashful.artifacts.ARTIFACTS_DIR", tmp_path / "empty")
+    main(["artifacts", "--json"])
+    import json
+    out = capsys.readouterr().out
+    data = json.loads(out)
+    assert data == []
 
 
 def test_dialectic_rejects_wrong_agent_count(capsys):

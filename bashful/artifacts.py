@@ -168,6 +168,27 @@ def save_dialectic_artifact(data: dict, mode: str = "read") -> str:
     return artifact_id
 
 
+def save_compare_artifact(data: dict, mode: str = "read") -> str:
+    """Save compare results as a JSON artifact. Returns the artifact ID."""
+    _ensure_dir()
+    agents = [aid for aid, _ in data["results"]]
+    artifact_id, ts = _next_id(f"compare-{'-'.join(agents)}")
+    artifact = {
+        "type": "compare",
+        "id": artifact_id,
+        "timestamp": ts,
+        "agents": agents,
+        "mode": mode,
+        "prompt": data["prompt"],
+        "results": [_serialize_result(aid, r) for aid, r in data["results"]],
+        "judge": data.get("judge"),
+        "all_ok": all(r.ok for _, r in data["results"]),
+    }
+    path = ARTIFACTS_DIR / f"{artifact_id}.json"
+    path.write_text(json.dumps(artifact, indent=2))
+    return artifact_id
+
+
 def save_matrix_artifact(
     rows: list[dict],
     agent_ids: list[str],

@@ -155,8 +155,8 @@ clear error.  Use `bashful show <agent>` to check which modes an agent supports.
 
 | Command | Description |
 |---------|-------------|
-| `bashful list` | List all supported agents and install status |
-| `bashful doctor` | Readiness report — what's installed, what's missing |
+| `bashful list [--json]` | List all supported agents and install status |
+| `bashful doctor [--json]` | Readiness report — what's installed, what's missing |
 | `bashful show <agent>` | Show full details for a specific agent |
 | `bashful versions [agent]` | Print version info for installed agents |
 | `bashful ping [agent] [--live]` | Health check (version + optional API ping) |
@@ -165,6 +165,7 @@ clear error.  Use `bashful show <agent>` to check which modes an agent supports.
 | `bashful fanout agent1,agent2 "prompt" --parallel` | Run fanout concurrently |
 | `bashful compare agent1,agent2 "prompt"` | Compare responses side-by-side |
 | `bashful compare agent1,agent2 "prompt" --judge claude` | Compare with a judge agent |
+| `bashful compare agent1,agent2 "prompt" --save` | Compare and save as artifact |
 | `bashful review agent1,agent2 "target"` | Structured review/critique from multiple agents |
 | `bashful review agent1,agent2 "target" --judge claude` | Review with synthesized assessment |
 | `bashful dialectic agent_a,agent_b "question"` | Thesis/antithesis dialectic |
@@ -172,7 +173,7 @@ clear error.  Use `bashful show <agent>` to check which modes an agent supports.
 | `bashful matrix agent1,agent2 --prompt "p1" --prompt "p2"` | Prompt × agent matrix sweep |
 | `bashful config` | Show current configuration and overrides |
 | `bashful launch <agent> "prompt" [-m mode]` | Launch a background job |
-| `bashful jobs` | List all jobs and their status |
+| `bashful jobs [--json]` | List all jobs and their status |
 | `bashful logs <job_id>` | Read stdout/stderr from a job |
 | `bashful kill <job_id>` | Kill a running job |
 | `bashful wait <job_id>` | Block until a job finishes |
@@ -185,7 +186,7 @@ clear error.  Use `bashful show <agent>` to check which modes an agent supports.
 | `bashful review agents "target" --save` | Review and save an artifact |
 | `bashful dialectic agents "question" --save` | Dialectic and save an artifact |
 | `bashful matrix agents --prompt "p1" --save` | Matrix and save an artifact |
-| `bashful artifacts` | List saved artifacts |
+| `bashful artifacts [--json]` | List saved artifacts |
 | `bashful artifacts <id>` | Show a saved artifact (JSON) |
 | `bashful skill [--live]` | Print this skill document |
 
@@ -241,8 +242,8 @@ bashful compare claude,codex "Explain this error"
 # Compare with a judge agent to synthesize
 bashful compare claude,codex,gemini "Best way to handle errors?" --judge claude
 
-# Parallel comparison
-bashful compare claude,codex "Review this code" --parallel
+# Save comparison as artifact
+bashful compare claude,codex "Review this code" --parallel --save
 ```
 
 ### 6. Structured review
@@ -281,18 +282,13 @@ bashful matrix claude,codex --prompt "p1" --prompt "p2" --parallel --save
 ### 9. Save and inspect artifacts
 
 ```bash
-# Save results from any command
+# --save works with run, fanout, compare, review, dialectic, matrix
 bashful run claude "Explain this function" --save
+bashful compare claude,codex "Best approach?" --judge claude --save
 
-# Save a fanout result
-bashful fanout claude,codex "Review this code" --save
-
-# Save review/dialectic results
-bashful review claude,codex "Audit this plan" --save
-bashful dialectic claude,codex "Monorepos?" --judge claude --save
-
-# List recent artifacts
+# List recent artifacts (human or JSON)
 bashful artifacts
+bashful artifacts --json
 
 # Show a specific artifact (JSON)
 bashful artifacts run-claude-1710000000
@@ -354,7 +350,8 @@ bashful worktree remove add-tests
 - Use `bashful dialectic` to explore opposing strategies or tradeoffs.
 - Use `bashful fanout` for multi-agent dispatch without judge overhead (`--parallel` for speed).
 - Use `bashful matrix` for prompt × agent sweeps — multiple prompts, multiple agents, one command.
-- Use `--save` with `run`, `fanout`, `review`, `dialectic`, or `matrix` to persist results as artifacts.
+- Use `--save` with `run`, `fanout`, `compare`, `review`, `dialectic`, or `matrix` to persist results as artifacts.
+- Use `--json` with `list`, `doctor`, `jobs`, or `artifacts` for machine-readable output.
 - Use `bashful launch` for work that takes more than a few seconds; follow with `wait` or `watch`.
 - Use `--isolate` with `launch` to prevent agents from conflicting.
 - Use `-m write` only when you need the agent to modify files.
