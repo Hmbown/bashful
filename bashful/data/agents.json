@@ -68,7 +68,7 @@
     "executable": "qwen",
     "description": "Alibaba's Qwen coding agent for local and remote model interaction.",
     "invocation": "qwen -p \"your prompt here\"",
-    "modes": ["read", "write"],
+    "modes": ["read"],
     "headless": {
       "style": "flag",
       "args": ["-p", "{prompt}", "-o", "text"],
