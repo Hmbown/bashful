@@ -40,7 +40,7 @@
     "description": "GitHub's AI pair programmer, accessed via the gh CLI extension.",
     "invocation": "gh copilot -p \"your prompt here\"",
     "subcommand": "copilot",
-    "modes": ["read"],
+    "modes": ["read", "write"],
     "headless": {
       "style": "subcommand",
       "args": ["copilot", "-p", "{prompt}"]
@@ -53,7 +53,7 @@
     "executable": "gemini",
     "description": "Google's Gemini agent for terminal-based coding and research.",
     "invocation": "gemini -p \"your prompt here\"",
-    "modes": ["read"],
+    "modes": ["read", "write"],
     "headless": {
       "style": "flag",
       "args": ["-p", "{prompt}", "-o", "text"],
@@ -68,7 +68,7 @@
     "executable": "qwen",
     "description": "Alibaba's Qwen coding agent for local and remote model interaction.",
     "invocation": "qwen -p \"your prompt here\"",
-    "modes": ["read"],
+    "modes": ["read", "write"],
     "headless": {
       "style": "flag",
       "args": ["-p", "{prompt}", "-o", "text"],
@@ -83,7 +83,7 @@
     "executable": "opencode",
     "description": "Open-source terminal coding assistant supporting multiple LLM backends.",
     "invocation": "opencode run \"your prompt here\"",
-    "modes": ["read"],
+    "modes": ["read", "write"],
     "headless": {
       "style": "subcommand",
       "args": ["run", "{prompt}"]

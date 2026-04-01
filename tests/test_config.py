@@ -108,4 +108,4 @@ class TestAgentLoadWithOverrides:
         from bashful.agents import load_agents
         agents = load_agents()
         gemini = next(a for a in agents if a.id == "gemini")
-        assert gemini.modes == ["read"]  # default
+        assert gemini.modes == ["read", "write"]  # default from catalog
