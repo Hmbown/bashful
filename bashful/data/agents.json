@@ -86,7 +86,10 @@
     "modes": ["read", "write"],
     "headless": {
       "style": "subcommand",
-      "args": ["run", "{prompt}"]
+      "args": ["run", "{prompt}"],
+      "mode_args": {
+        "write": []
+      }
     },
     "version_args": ["--version"]
   }
